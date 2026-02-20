@@ -144,6 +144,8 @@ type CropAutoPlayStatus = {
   modelAId: string | null;
   modelBId: string | null;
   lastResult: CropTestResultVs | null;
+  lastError?: string | null;
+  running?: boolean;
 };
 
 function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalanceChange?: () => void }) {
@@ -210,7 +212,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
         .catch(() => setCropAutoPlayStatus(null));
     };
     poll();
-    const t = setInterval(poll, 15000);
+    const t = setInterval(poll, 5000); // Poll every 5s to pick up results quickly
     return () => clearInterval(t);
   }, [API]);
 
@@ -420,17 +422,27 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               ? `${cropModels.find((m) => m.id === cropAutoPlayStatus.modelAId)?.name ?? cropAutoPlayStatus.modelAId} vs ${cropModels.find((m) => m.id === cropAutoPlayStatus.modelBId)?.name ?? cropAutoPlayStatus.modelBId}`
               : "— vs —"}
           </div>
-          <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#fde047" }}>
-            {cropAutoPlayStatus.nextRunAt
-              ? (() => {
-                  const rem = Math.max(0, new Date(cropAutoPlayStatus.nextRunAt).getTime() - cropNow);
-                  const m = Math.floor(rem / 60000);
-                  const s = Math.floor((rem % 60000) / 1000);
-                  return `Next crop run in ${m}:${s.toString().padStart(2, "0")}`;
-                })()
-              : "Next run: soon…"}
-          </div>
-          {cropAutoPlayStatus.lastRunAt && (
+          {cropAutoPlayStatus.running && (
+            <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#a78bfa" }}>Run in progress (~30s)…</div>
+          )}
+          {!cropAutoPlayStatus.running && (
+            <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#fde047" }}>
+              {cropAutoPlayStatus.nextRunAt
+                ? (() => {
+                    const rem = Math.max(0, new Date(cropAutoPlayStatus.nextRunAt).getTime() - cropNow);
+                    const m = Math.floor(rem / 60000);
+                    const s = Math.floor((rem % 60000) / 1000);
+                    return `Next crop run in ${m}:${s.toString().padStart(2, "0")}`;
+                  })()
+                : "Next run: soon…"}
+            </div>
+          )}
+          {cropAutoPlayStatus.lastError && (
+            <div style={{ marginTop: 8, fontSize: "0.9rem", color: "#f87171" }}>
+              Last run failed: {cropAutoPlayStatus.lastError}
+            </div>
+          )}
+          {cropAutoPlayStatus.lastRunAt && !cropAutoPlayStatus.lastError && (
             <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#94a3b8" }}>
               Last run: {(() => {
                 const sec = Math.floor((cropNow - new Date(cropAutoPlayStatus.lastRunAt).getTime()) / 1000);
@@ -1640,11 +1652,6 @@ export default function App() {
 
       {activeTab === "blackjack" && (
     <div style={{ maxWidth: 560 }}>
-      <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Blackjack AI benchmark</h2>
-      <p style={{ color: "#a1a1aa", marginBottom: 24 }}>
-        $100k/day per AI. We only ask; no data provided. Play hands and see performance.
-      </p>
-
       {apiUnreachable && (
         <p style={{ padding: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, marginBottom: 24 }}>
           Can’t reach the API. Start the backend: {API_BASE.startsWith("http://127.0.0.1") ? (
@@ -1655,74 +1662,14 @@ export default function App() {
         </p>
       )}
 
-      <section style={{ marginBottom: 24 }}>
-        <label style={{ display: "block", marginBottom: 8 }}>AI model</label>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            background: "#18181b",
-            border: "1px solid #3f3f46",
-            borderRadius: 8,
-            color: "#e4e4e7",
-          }}
-        >
-          {models.length === 0 && <option value="">No models (set OPENAI_API_KEY)</option>}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      {balance !== null && (
+      {false && (
         <p style={{ marginBottom: 16 }}>
-          Today’s balance: <strong>${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
+          Today’s balance: <strong>${(balance ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
         </p>
       )}
 
-      <section style={{ marginBottom: 24, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div>
-          <label style={{ display: "block", marginBottom: 8 }}>Number of hands</label>
-          <input
-            type="number"
-            min="1"
-            max="100"
-            value={numHands}
-            onChange={(e) => setNumHands(Number(e.target.value) || 1)}
-            style={{
-              width: 80,
-              padding: "10px 12px",
-              background: "#18181b",
-              border: "1px solid #3f3f46",
-              borderRadius: 8,
-              color: "#e4e4e7",
-            }}
-          />
-        </div>
-        <button
-          onClick={playStream}
-          disabled={streaming || !selectedModel}
-          style={{
-            padding: "12px 24px",
-            background: streaming ? "#3f3f46" : "#3b82f6",
-            border: "none",
-            borderRadius: 8,
-            color: "#fff",
-            fontWeight: 600,
-            cursor: streaming ? "not-allowed" : "pointer",
-          }}
-        >
-          {streaming ? "Playing…" : `Play ${numHands} hand${Number(numHands) !== 1 ? "s" : ""}`}
-        </button>
-      </section>
 
-      {error && <p style={{ color: "#f87171", marginTop: 16 }}>{error}</p>}
-
-      {(streaming || streamState.totalHands > 0) && (
+      {false && (streaming || streamState.totalHands > 0) && (
         <div
           style={{
             marginTop: 24,
@@ -1832,9 +1779,9 @@ export default function App() {
               </p>
             )}
             {streamState.outcome && (
-              <p style={{ marginBottom: 0, color: streamState.outcome === "win" ? "#86efac" : streamState.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
-                <strong>Outcome:</strong> {streamState.outcome.toUpperCase()}
-                {streamState.pnlCents != null && ` — ${streamState.pnlCents >= 0 ? "+" : ""}$${formatDollars(streamState.pnlCents)}`}
+              <p style={{ marginBottom: 0, color: (streamState.outcome ?? "") === "win" ? "#86efac" : (streamState.outcome ?? "") === "loss" ? "#fca5a5" : "#fde047" }}>
+                <strong>Outcome:</strong> {(streamState.outcome ?? "").toUpperCase()}
+                {streamState.pnlCents != null && ` — ${(streamState.pnlCents ?? 0) >= 0 ? "+" : ""}$${formatDollars(streamState.pnlCents)}`}
               </p>
             )}
             {streamState.handSummaries.length > 0 && (

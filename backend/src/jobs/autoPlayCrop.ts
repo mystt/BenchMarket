@@ -19,6 +19,8 @@ export type CropAutoPlayStatus = {
   modelAId: string | null;
   modelBId: string | null;
   lastResult: CropTestResultVs | null;
+  lastError: string | null;
+  running: boolean;
 };
 
 let cropAutoPlayState: {
@@ -27,8 +29,9 @@ let cropAutoPlayState: {
   modelAId: string | null;
   modelBId: string | null;
   lastResult: CropTestResultVs | null;
+  lastError: string | null;
   running: boolean;
-} = { nextRunAt: null, lastRunAt: null, modelAId: null, modelBId: null, lastResult: null, running: false };
+} = { nextRunAt: null, lastRunAt: null, modelAId: null, modelBId: null, lastResult: null, lastError: null, running: false };
 
 export function getCropAutoPlayStatus(): CropAutoPlayStatus {
   const delayMs = config.cropAutoPlayDelayMs;
@@ -40,6 +43,8 @@ export function getCropAutoPlayStatus(): CropAutoPlayStatus {
     modelAId: cropAutoPlayState.modelAId,
     modelBId: cropAutoPlayState.modelBId,
     lastResult: cropAutoPlayState.lastResult,
+    lastError: cropAutoPlayState.lastError,
+    running: cropAutoPlayState.running,
   };
 }
 
@@ -63,17 +68,20 @@ async function runCropLoop(): Promise<void> {
 
     if (shouldRun) {
       cropAutoPlayState.running = true;
+      cropAutoPlayState.lastError = null;
       cropAutoPlayState.nextRunAt = new Date(now + delayMs);
       try {
         const result = await runCropTestVs(modelAId, modelBId);
         cropAutoPlayState.lastResult = result;
         cropAutoPlayState.lastRunAt = new Date();
+        cropAutoPlayState.lastError = null;
         runCount++;
         if (runCount % 5 === 0) {
           console.log(`Auto-play crop (${nameA} vs ${nameB}): ${runCount} runs completed`);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        cropAutoPlayState.lastError = msg;
         console.warn("Auto-play crop run failed:", msg);
       }
       cropAutoPlayState.running = false;

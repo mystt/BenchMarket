@@ -169,6 +169,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
   const [cropLongTermLoading, setCropLongTermLoading] = useState(false);
   const [cropNextTestOddsHistory, setCropNextTestOddsHistory] = useState<{ time: string; impliedAWinsPct: number; totalACents: number; totalBCents: number }[]>([]);
   const [cropLongTermOddsHistory, setCropLongTermOddsHistory] = useState<{ time: string; impliedYesPct: number; totalYesCents: number; totalNoCents: number }[]>([]);
+  const [cropSyncLoading, setCropSyncLoading] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/crop/models`)
@@ -199,22 +200,23 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
     if (cropResultVs) fetchCropBets();
   }, [cropResultVs, fetchCropBets]);
 
-  useEffect(() => {
-    const poll = () => {
-      fetch(`${API}/crop/auto-play-status`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (d) {
-            setCropAutoPlayStatus(d);
-            if (d.lastResult) setCropResultVs(d.lastResult);
-          }
-        })
-        .catch(() => setCropAutoPlayStatus(null));
-    };
-    poll();
-    const t = setInterval(poll, 5000); // Poll every 5s to pick up results quickly
-    return () => clearInterval(t);
+  const fetchCropAutoPlayStatus = useCallback(() => {
+    fetch(`${API}/crop/auto-play-status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setCropAutoPlayStatus(d);
+          if (d.lastResult) setCropResultVs(d.lastResult);
+        }
+      })
+      .catch(() => setCropAutoPlayStatus(null));
   }, [API]);
+
+  useEffect(() => {
+    fetchCropAutoPlayStatus();
+    const t = setInterval(fetchCropAutoPlayStatus, 5000); // Poll every 5s to pick up results quickly
+    return () => clearInterval(t);
+  }, [fetchCropAutoPlayStatus]);
 
   useEffect(() => {
     if (!cropAutoPlayStatus?.enabled || !cropAutoPlayStatus?.nextRunAt) return;
@@ -423,6 +425,36 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
       <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
         US corn futures. Two AIs each get $100k fake capital and make buy/sell decisions. Every 5 min, each agent gets one decision on the latest corn price.
       </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          disabled={cropSyncLoading}
+          onClick={async () => {
+            setCropSyncLoading(true);
+            try {
+              const r = await fetch(`${API}/hedera/sync`);
+              if (r.ok) {
+                fetchCropAutoPlayStatus();
+              }
+            } finally {
+              setCropSyncLoading(false);
+            }
+          }}
+          style={{
+            padding: "8px 14px",
+            background: "#334155",
+            border: "1px solid #475569",
+            borderRadius: 8,
+            color: "#e2e8f0",
+            fontSize: "0.9rem",
+            cursor: cropSyncLoading ? "not-allowed" : "pointer",
+          }}
+        >
+          {cropSyncLoading ? "Syncing…" : "Sync from HCS"}
+        </button>
+        <span style={{ fontSize: "0.8rem", color: "#64748b" }}>Refresh charts from Hedera topic</span>
+      </div>
 
       {cropAutoPlayStatus?.enabled && (
         <div style={{ marginBottom: 20, padding: 16, background: "#0f172a", borderRadius: 10, border: "1px solid #334155" }}>

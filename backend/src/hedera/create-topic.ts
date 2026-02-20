@@ -7,16 +7,13 @@
  * Prints the new topic ID to add to .env as HEDERA_TOPIC_ID.
  */
 
-import { join } from "path";
-import { config as loadEnv } from "dotenv";
-loadEnv({ path: join(process.cwd(), "..", ".env") });
-loadEnv({ path: join(process.cwd(), ".env") });
+import "./load-env.js";
 
 import { Client, PrivateKey, TopicCreateTransaction } from "@hashgraph/sdk";
 import { config } from "../config.js";
 
 async function main() {
-  const { hederaOperatorId, hederaOperatorKey, hederaNetwork } = config;
+  const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork } = config;
   if (!hederaOperatorId || !hederaOperatorKey) {
     console.error("Set HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY in .env (project root or backend)");
     process.exit(1);
@@ -28,12 +25,22 @@ async function main() {
       : net === "previewnet"
         ? Client.forPreviewnet()
         : Client.forTestnet();
-  const key = /^[0-9a-fA-F]{64}$/.test(hederaOperatorKey)
-    ? PrivateKey.fromStringED25519(hederaOperatorKey)
-    : PrivateKey.fromString(hederaOperatorKey);
+  const keyStr = hederaOperatorKey.replace(/\s/g, "").trim().replace(/^0x/i, "");
+  let key: InstanceType<typeof PrivateKey>;
+  if (/^[0-9a-fA-F]{64}$/.test(keyStr)) {
+    key = hederaKeyType === "ed25519"
+      ? PrivateKey.fromStringED25519(keyStr)
+      : PrivateKey.fromStringECDSA(keyStr);
+  } else if (/^302[ce][0-9a-fA-F]+$/.test(keyStr)) {
+    key = PrivateKey.fromStringDer(keyStr);
+  } else if (/^[0-9a-fA-F]+$/.test(keyStr) && keyStr.length > 64) {
+    key = PrivateKey.fromStringDer(keyStr);
+  } else {
+    key = PrivateKey.fromString(hederaOperatorKey);
+  }
   client.setOperator(hederaOperatorId, key);
 
-  const tx = new TopicCreateTransaction().setTopicMemo("AI benchmark results (blackjack, crop, market)");
+  const tx = new TopicCreateTransaction().setTopicMemo("AI benchmark: blackjack, crop, market. Indexed by mirror node.");
   const response = await tx.execute(client);
   const receipt = await response.getReceipt(client);
   const topicId = receipt.topicId;

@@ -1,13 +1,14 @@
 /**
  * In-memory store when no DB is installed (no Python / native modules needed).
  * Data resets when the server restarts.
+ * Can be hydrated from Hedera HCS topic messages on startup.
  */
 
 export type QueryResult<T = Record<string, unknown>> = { rows: T[]; rowCount: number };
 
 const aiModels: Record<string, { id: string; name: string; provider: string }> = {};
 const dailyBankrolls: Map<string, { balance_cents: number }> = new Map();
-const blackjackHands: { model_id: string; date: string; pnl_cents: number }[] = [];
+let blackjackHands: { model_id: string; date: string; pnl_cents: number }[] = [];
 const performanceBets: { id: string; domain: string; model_id: string; period: string; direction: string; amount_cents: number; outcome: string; payout_cents: number; created_at: string }[] = [];
 const next3Bets: { id: string; model_a_id: string; model_b_id: string; direction: string; amount_cents: number; outcome: string; payout_cents: number; hands_a_at_bet: number; pnl_a_at_bet: number; hands_b_at_bet: number; pnl_b_at_bet: number; date: string; created_at: string }[] = [];
 
@@ -211,4 +212,22 @@ export function memoryQuery<T = Record<string, unknown>>(
   }
 
   return { rows: [], rowCount: 0 };
+}
+
+/** Load blackjack hands from HCS hydration. Replaces existing. Only used when config.useSqlite (memory mode). */
+export function loadBlackjackHandsFromHedera(hands: Array<{ model_id: string; date: string; pnl_cents: number }>): void {
+  blackjackHands = hands.slice();
+}
+
+/** Recompute daily bankrolls from blackjack hands + initial balance. Call after loadBlackjackHandsFromHedera. */
+export function recomputeDailyBankrollsFromHands(initialCents: number): void {
+  const byKey = new Map<string, number>();
+  for (const h of blackjackHands) {
+    const k = key(h.model_id, "blackjack", h.date);
+    const current = byKey.get(k) ?? initialCents;
+    byKey.set(k, current + h.pnl_cents);
+  }
+  for (const [k, bal] of byKey) {
+    dailyBankrolls.set(k, { balance_cents: bal });
+  }
 }

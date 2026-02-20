@@ -8,6 +8,30 @@ import { runCropSingleStepVs, type CropTestResultVs, type CropVsState } from "..
 
 let cropVsState: CropVsState | null = null;
 
+/** Hydrate crop state from HCS mirror (used on startup). */
+export function setCropVsStateFromHydration(
+  state: CropVsState | null,
+  result?: { modelAId: string; modelBId: string }
+): void {
+  cropVsState = state;
+  if (state && result) {
+    const lastA = state.historyA[state.historyA.length - 1];
+    const lastB = state.historyB[state.historyB.length - 1];
+    cropAutoPlayState.lastResult = {
+      modelAId: result.modelAId,
+      modelBId: result.modelBId,
+      prices: [],
+      historyA: state.historyA,
+      historyB: state.historyB,
+      startValueCents: config.cropBankrollCents,
+      finalValueCentsA: lastA?.valueCents ?? config.cropBankrollCents,
+      finalValueCentsB: lastB?.valueCents ?? config.cropBankrollCents,
+    };
+    cropAutoPlayState.modelAId = result.modelAId;
+    cropAutoPlayState.modelBId = result.modelBId;
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

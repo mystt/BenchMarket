@@ -2,6 +2,7 @@ import { getAIProvider } from "../../ai/index.js";
 import { config } from "../../config.js";
 import { fetchCornPrices, fetchCornPricesForTrading, type CornPricePoint } from "../../sources/corn.js";
 import { settleCropNextTestBets } from "./market.js";
+import { submitAiResult } from "../../hedera/hcs.js";
 
 const CROP_BANKROLL_CENTS = config.cropBankrollCents;
 const TEST_STEPS = 10; // number of trading steps (legacy multi-step run)
@@ -406,6 +407,36 @@ export async function runCropSingleStepVs(
   const historyB = trimHistory([...state.historyB, snapshotB], MAX_HISTORY);
 
   settleCropNextTestBets(modelIdA, modelIdB, valueA, valueB);
+
+  submitAiResult({
+    domain: "crop_decision",
+    modelAId: modelIdA,
+    modelBId: modelIdB,
+    snapshotA: {
+      date,
+      pricePerBushel,
+      cashCents: cashA,
+      bushels: bushelsA,
+      valueCents: valueA,
+      trade: parsedA.trade,
+      size: parsedA.size,
+      reasoning: parsedA.reasoning ?? undefined,
+      longTermBushelsPerAcre: parsedA.longTermBushelsPerAcre ?? undefined,
+      reasonLongTerm: parsedA.reasonLongTerm ?? undefined,
+    },
+    snapshotB: {
+      date,
+      pricePerBushel,
+      cashCents: cashB,
+      bushels: bushelsB,
+      valueCents: valueB,
+      trade: parsedB.trade,
+      size: parsedB.size,
+      reasoning: parsedB.reasoning ?? undefined,
+      longTermBushelsPerAcre: parsedB.longTermBushelsPerAcre ?? undefined,
+      reasonLongTerm: parsedB.reasonLongTerm ?? undefined,
+    },
+  }).catch(() => {});
 
   const result: CropTestResultVs = {
     modelAId: modelIdA,

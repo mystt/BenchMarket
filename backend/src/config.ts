@@ -1,9 +1,12 @@
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { config as loadEnv } from "dotenv";
 import { z } from "zod";
 
-// Load .env: try repo root (parent of backend) then backend dir (Render cwd)
-loadEnv({ path: join(process.cwd(), "..", ".env") });
+// Load .env: repo root, backend dir, then cwd (for Render)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: join(__dirname, "..", "..", ".env") });
+loadEnv({ path: join(__dirname, "..", ".env") });
 loadEnv({ path: join(process.cwd(), ".env") });
 
 const env = z.object({
@@ -23,8 +26,10 @@ const env = z.object({
   AUTO_PLAY_BET_CENTS: z.coerce.number().default(1000),
   /** Hedera HCS: operator account id (e.g. 0.0.1234). If set with key/topic, AI results are submitted to the topic. */
   HEDERA_OPERATOR_ID: z.string().optional(),
-  /** Hedera operator private key (ED25519 hex or DER). */
+  /** Hedera operator private key (hex, with or without 0x prefix). */
   HEDERA_OPERATOR_KEY: z.string().optional(),
+  /** Hedera key type: ecdsa | ed25519. Hedera Portal accounts typically use ecdsa. Default ecdsa for 64-char hex. */
+  HEDERA_KEY_TYPE: z.enum(["ecdsa", "ed25519"]).optional(),
   /** Hedera network: testnet | mainnet | previewnet. */
   HEDERA_NETWORK: z.enum(["testnet", "mainnet", "previewnet"]).default("testnet"),
   /** HCS topic id (e.g. 0.0.5678). Required to submit AI results. */
@@ -52,6 +57,7 @@ export const config = {
   /** Hedera HCS: when all set, submit AI results to HEDERA_TOPIC_ID */
   hederaOperatorId: env.HEDERA_OPERATOR_ID,
   hederaOperatorKey: env.HEDERA_OPERATOR_KEY,
+  hederaKeyType: env.HEDERA_KEY_TYPE,
   hederaNetwork: env.HEDERA_NETWORK,
   hederaTopicId: env.HEDERA_TOPIC_ID,
 } as const;

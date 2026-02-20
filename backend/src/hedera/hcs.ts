@@ -2,6 +2,8 @@
  * Hedera Consensus Service (HCS): submit AI benchmark results to a topic.
  * When HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY, and HEDERA_TOPIC_ID are set in .env,
  * results are published so mirror nodes / other services can consume them (e.g. for blockchain integration).
+ *
+ * Message format: { v: 1, ts: ISO, domain, ...payload } — see schema.ts
  */
 
 import {
@@ -11,12 +13,17 @@ import {
   TopicMessageSubmitTransaction,
 } from "@hashgraph/sdk";
 import { config } from "../config.js";
+import { HCS_SCHEMA_VERSION } from "./schema.js";
+import type { HcsPayload } from "./schema.js";
+
+// Re-export for consumers
+export type { CropSnapshotPayload } from "./schema.js";
 
 let client: Client | null = null;
 
 function getClient(): Client | null {
   if (client != null) return client;
-  const { hederaOperatorId, hederaOperatorKey, hederaNetwork, hederaTopicId } = config;
+  const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork, hederaTopicId } = config;
   if (!hederaOperatorId || !hederaOperatorKey || !hederaTopicId) return null;
   try {
     const net = hederaNetwork ?? "testnet";
@@ -26,10 +33,13 @@ function getClient(): Client | null {
         : net === "previewnet"
           ? Client.forPreviewnet()
           : Client.forTestnet();
-    // Hedera accounts typically use ED25519; key in .env as hex (64 chars) or DER hex
-    const key = /^[0-9a-fA-F]{64}$/.test(hederaOperatorKey)
-      ? PrivateKey.fromStringED25519(hederaOperatorKey)
-      : PrivateKey.fromString(hederaOperatorKey);
+    const keyStr = hederaOperatorKey.replace(/\s/g, "").trim().replace(/^0x/i, "");
+    const key =
+      /^[0-9a-fA-F]{64}$/.test(keyStr)
+        ? (hederaKeyType === "ed25519" ? PrivateKey.fromStringED25519(keyStr) : PrivateKey.fromStringECDSA(keyStr))
+        : /^302[ce][0-9a-fA-F]+$/.test(keyStr) || (keyStr.length > 64 && /^[0-9a-fA-F]+$/.test(keyStr))
+          ? PrivateKey.fromStringDer(keyStr)
+          : PrivateKey.fromString(hederaOperatorKey);
     client.setOperator(hederaOperatorId, key);
     return client;
   } catch (e) {
@@ -38,12 +48,8 @@ function getClient(): Client | null {
   }
 }
 
-/** Payload types we publish (domain + result fields). */
-export type AiResultPayload =
-  | { domain: "blackjack"; handId: string; modelId: string; date: string; betCents: number; outcome: string; pnlCents: number; playerCards: string[]; dealerUpcard: string; decision: string }
-  | { domain: "blackjack_vs"; handIdA: string; handIdB: string; modelIdA: string; modelIdB: string; date: string; outcomeA: string; outcomeB: string; pnlA: number; pnlB: number }
-  | { domain: "crop"; runId: string; modelId: string; portfolioEndCents: number; bushelsPerAcre?: number }
-  | { domain: "market"; type: "day" | "next3"; id: string; outcome: string; payoutCents?: number };
+/** Payload to submit (same as HcsPayload from schema). */
+export type AiResultPayload = HcsPayload;
 
 const MAX_MESSAGE_BYTES = 1024;
 
@@ -56,7 +62,7 @@ export async function submitAiResult(payload: AiResultPayload): Promise<void> {
   if (!c) return;
   const topicId = config.hederaTopicId!;
   const client = c;
-  const message = JSON.stringify({ ts: new Date().toISOString(), ...payload });
+  const message = JSON.stringify({ v: HCS_SCHEMA_VERSION, ts: new Date().toISOString(), ...payload });
   const bytes = new TextEncoder().encode(message);
   if (bytes.length > MAX_MESSAGE_BYTES) {
     console.warn("[HCS] Message too long, truncating:", bytes.length);

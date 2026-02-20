@@ -11,9 +11,13 @@ import type { CropVsState, CropPortfolioSnapshot } from "../domains/crop/service
 
 export async function hydrateFromHedera(): Promise<void> {
   if (!config.hederaTopicId) return;
-  const messages = await fetchTopicMessages({ limit: 2000, order: "asc" });
+  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
   if (messages.length === 0) return;
 
+  let blackjackCount = 0;
+  let blackjackVsCount = 0;
+  let cropDecisionCount = 0;
+  let cropSkipped = 0;
   const blackjackHands: Array<{ model_id: string; date: string; pnl_cents: number }> = [];
   let cropState: CropVsState | null = null;
   let cropModelAId = "";
@@ -25,11 +29,13 @@ export async function hydrateFromHedera(): Promise<void> {
       const domain = parsed.domain as string | undefined;
 
       if (domain === "blackjack") {
+        blackjackCount++;
         const modelId = String(parsed.modelId ?? "");
         const date = String(parsed.date ?? "").slice(0, 10);
         const pnlCents = Number(parsed.pnlCents ?? 0);
         if (modelId && date) blackjackHands.push({ model_id: modelId, date, pnl_cents: pnlCents });
       } else if (domain === "blackjack_vs") {
+        blackjackVsCount++;
         const modelAId = String(parsed.modelIdA ?? "");
         const modelBId = String(parsed.modelIdB ?? "");
         const date = String(parsed.date ?? "").slice(0, 10);
@@ -38,15 +44,22 @@ export async function hydrateFromHedera(): Promise<void> {
         if (modelAId && date) blackjackHands.push({ model_id: modelAId, date, pnl_cents: pnlA });
         if (modelBId && date) blackjackHands.push({ model_id: modelBId, date, pnl_cents: pnlB });
       } else if (domain === "crop_decision") {
+        cropDecisionCount++;
         const modelAId = String(parsed.modelAId ?? "");
         const modelBId = String(parsed.modelBId ?? "");
         const sa = parsed.snapshotA as Record<string, unknown> | undefined;
         const sb = parsed.snapshotB as Record<string, unknown> | undefined;
-        if (!sa || !sb || !modelAId || !modelBId) continue;
+        if (!sa || !sb || !modelAId || !modelBId) {
+          cropSkipped++;
+          continue;
+        }
 
         const snapA = toPortfolioSnapshot(sa);
         const snapB = toPortfolioSnapshot(sb);
-        if (!snapA || !snapB) continue;
+        if (!snapA || !snapB) {
+          cropSkipped++;
+          continue;
+        }
 
         cropModelAId = modelAId;
         cropModelBId = modelBId;
@@ -64,12 +77,19 @@ export async function hydrateFromHedera(): Promise<void> {
     }
   }
 
+  console.log(
+    `[HCS Hydrate] ${messages.length} messages: blackjack=${blackjackCount}, blackjack_vs=${blackjackVsCount}, crop_decision=${cropDecisionCount} (skipped=${cropSkipped})`
+  );
   if (blackjackHands.length > 0 && config.useSqlite) {
     loadBlackjackHandsFromHedera(blackjackHands);
     recomputeDailyBankrollsFromHands(config.blackjackDailyCents);
+    console.log(`[HCS Hydrate] Loaded ${blackjackHands.length} blackjack hands`);
   }
   if (cropState && cropModelAId && cropModelBId) {
     setCropVsStateFromHydration(cropState, { modelAId: cropModelAId, modelBId: cropModelBId });
+    console.log(
+      `[HCS Hydrate] Loaded crop state: ${cropModelAId} vs ${cropModelBId}, ${cropState.historyA.length} decisions each`
+    );
   }
 }
 
@@ -79,7 +99,8 @@ function toPortfolioSnapshot(obj: Record<string, unknown>): CropPortfolioSnapsho
   const cashCents = Number(obj.cashCents ?? 0);
   const bushels = Number(obj.bushels ?? 0);
   const valueCents = Number(obj.valueCents ?? 0);
-  if (!date || (pricePerBushel === 0 && bushels === 0 && cashCents === 0)) return null;
+  if (!date) return null;
+  if (pricePerBushel === 0 && bushels === 0 && cashCents === 0) return null;
   return {
     date,
     pricePerBushel,

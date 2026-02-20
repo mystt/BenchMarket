@@ -397,7 +397,8 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
         const cashDollars = (h.cashCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
         const cornValueDollars = (h.bushels * displayPrice).toLocaleString("en-US", { minimumFractionDigits: 2 });
         const totalDollars = (displayValueCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
-        const exposurePct = displayValueCents > 0 ? Math.round((h.bushels * displayPrice * 100) / displayValueCents) : 0;
+        const cornValueCents = h.bushels * displayPrice * 100;
+        const exposurePct = displayValueCents > 0 ? Math.round((cornValueCents / displayValueCents) * 100) : 0;
         return (
           <li key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", alignItems: "baseline", marginBottom: 4 }}>

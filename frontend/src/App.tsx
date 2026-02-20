@@ -947,6 +947,7 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardHistorySeries[]>([]);
   const [persistedHandHistory, setPersistedHandHistory] = useState<HandReasoningEntry[]>([]);
+  const [persistedVsHandReasonings, setPersistedVsHandReasonings] = useState<VsHandReasoningEntry[]>([]);
   const [marketBets, setMarketBets] = useState<PerformanceBet[]>([]);
   const [next3Bets, setNext3Bets] = useState<Next3Bet[]>([]);
   const [userBalanceCents, setUserBalanceCents] = useState<number | null>(null);
@@ -1099,6 +1100,37 @@ export default function App() {
       })
       .catch(() => setPersistedHandHistory([]));
   }, [API, selectedModel, today, lastResult]);
+  useEffect(() => {
+    if (!modelA || !modelB || modelA === modelB) {
+      setPersistedVsHandReasonings([]);
+      return;
+    }
+    Promise.all([
+      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelA)}&date=${encodeURIComponent(today)}`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelB)}&date=${encodeURIComponent(today)}`).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([dA, dB]) => {
+        const handsA = (dA?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
+        const handsB = (dB?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
+        const n = Math.min(handsA.length, handsB.length);
+        const merged: VsHandReasoningEntry[] = [];
+        for (let i = 0; i < n; i++) {
+          const a = handsA[i];
+          const b = handsB[i];
+          merged.push({
+            handIndex: i + 1,
+            totalHands: n,
+            playerA: { betCents: a.betCents ?? null, betReasoning: null, reasoningText: "", cards: a.playerCards ?? [], total: null, outcome: a.outcome ?? null, pnlCents: a.pnlCents ?? null },
+            playerB: { betCents: b.betCents ?? null, betReasoning: null, reasoningText: "", cards: b.playerCards ?? [], total: null, outcome: b.outcome ?? null, pnlCents: b.pnlCents ?? null },
+            dealerUpcard: a.dealerUpcard ?? b.dealerUpcard ?? null,
+            dealerCards: a.dealerCards ?? b.dealerCards ?? [],
+            dealerTotal: a.dealerTotal ?? b.dealerTotal ?? null,
+          });
+        }
+        setPersistedVsHandReasonings(merged);
+      })
+      .catch(() => setPersistedVsHandReasonings([]));
+  }, [API, modelA, modelB, today, lastResult]);
   useEffect(() => {
     refetchLeaderboard();
   }, [lastResult, refetchLeaderboard]);
@@ -2130,10 +2162,10 @@ export default function App() {
               {models.find((m) => m.id === modelA)?.name ?? "Model A"} — scroll to review past hands
             </div>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-              {vsState.vsHandReasonings.length === 0 && (
+              {(vsState.vsHandReasonings.length === 0 && persistedVsHandReasonings.length === 0) && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}
-              {vsState.vsHandReasonings.map((entry, idx) => (
+              {(vsState.vsHandReasonings.length > 0 ? vsState.vsHandReasonings : persistedVsHandReasonings).map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
                   {(entry.playerA.cards.length > 0 || entry.dealerUpcard) && (
@@ -2163,7 +2195,7 @@ export default function App() {
                   <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
                     {entry.playerA.reasoningText ? (
                       <><span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Play reasoning: </span>{entry.playerA.reasoningText}</>
-                    ) : (streamingVs && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
+                    ) : (streamingVs && vsState.vsHandReasonings.length > 0 && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
                   </div>
                   {entry.playerA.outcome && (
                     <div style={{ marginTop: 8, fontSize: "0.8rem", color: entry.playerA.outcome === "win" ? "#86efac" : entry.playerA.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
@@ -2180,10 +2212,10 @@ export default function App() {
               {models.find((m) => m.id === modelB)?.name ?? "Model B"} — scroll to review past hands
             </div>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-              {vsState.vsHandReasonings.length === 0 && (
+              {(vsState.vsHandReasonings.length === 0 && persistedVsHandReasonings.length === 0) && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}
-              {vsState.vsHandReasonings.map((entry, idx) => (
+              {(vsState.vsHandReasonings.length > 0 ? vsState.vsHandReasonings : persistedVsHandReasonings).map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
                   {(entry.playerB.cards.length > 0 || entry.dealerUpcard) && (
@@ -2213,7 +2245,7 @@ export default function App() {
                   <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
                     {entry.playerB.reasoningText ? (
                       <><span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Play reasoning: </span>{entry.playerB.reasoningText}</>
-                    ) : (streamingVs && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
+                    ) : (streamingVs && vsState.vsHandReasonings.length > 0 && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
                   </div>
                   {entry.playerB.outcome && (
                     <div style={{ marginTop: 8, fontSize: "0.8rem", color: entry.playerB.outcome === "win" ? "#86efac" : entry.playerB.outcome === "loss" ? "#fca5a5" : "#fde047" }}>

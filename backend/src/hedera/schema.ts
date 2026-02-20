@@ -39,6 +39,16 @@ export type BlackjackVsPayload = {
   outcomeB: string;
   pnlA: number;
   pnlB: number;
+  /** Card data for decision history display */
+  playerACards?: string[];
+  playerBCards?: string[];
+  dealerUpcard?: string;
+  dealerCards?: string[];
+  dealerTotal?: number;
+  betA?: number;
+  betB?: number;
+  decisionA?: string;
+  decisionB?: string;
 };
 
 /** Crop portfolio snapshot (one decision per model) */

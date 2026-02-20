@@ -536,6 +536,15 @@ export async function playHandsStreamVs(
       outcomeB,
       pnlA,
       pnlB,
+      playerACards: resultA.cards,
+      playerBCards: resultB.cards,
+      dealerUpcard,
+      dealerCards: dealerCards.map(String),
+      dealerTotal: handValue(dealerCards),
+      betA: betA.betCents,
+      betB: betB.betCents,
+      decisionA: resultA.lastDecision,
+      decisionB: resultB.lastDecision,
     }).catch(() => {});
 
     onEvent({

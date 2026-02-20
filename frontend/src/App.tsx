@@ -105,6 +105,7 @@ type CropHistoryEntry = {
   cashCents: number;
   bushels: number;
   valueCents: number;
+  costBasisCents?: number;
   trade?: string;
   size?: number;
   reasoning?: string | null;
@@ -149,6 +150,12 @@ type CropAutoPlayStatus = {
   currentPricePerBushel?: number;
   liveValueCentsA?: number;
   liveValueCentsB?: number;
+  /** Unrealized P/L (bushels * (currentPrice - avgCost)). When avgCost === currentPrice → P/L = 0 */
+  pnlCentsA?: number;
+  pnlCentsB?: number;
+  /** Average cost basis ¢/bu */
+  avgCostCentsPerBushelA?: number;
+  avgCostCentsPerBushelB?: number;
 };
 
 function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalanceChange?: () => void }) {
@@ -328,6 +335,25 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
 
   const nameA = cropModels.find((m) => m.id === cropResultVs?.modelAId)?.name ?? cropResultVs?.modelAId ?? "A";
   const nameB = cropModels.find((m) => m.id === cropResultVs?.modelBId)?.name ?? cropResultVs?.modelBId ?? "B";
+
+  // P/L: use unrealized (bushels * (price - avgCost)) when we have cost basis; else value - startValue
+  const priceForPnl = currentPrice ?? historyA[historyA.length - 1]?.pricePerBushel ?? historyB[historyB.length - 1]?.pricePerBushel;
+  const lastA = historyA[historyA.length - 1];
+  const lastB = historyB[historyB.length - 1];
+  const costBasisA = lastA?.costBasisCents;
+  const costBasisB = lastB?.costBasisCents;
+  const hasCostBasisA = lastA && lastA.bushels > 0 && typeof costBasisA === "number" && costBasisA > 0;
+  const hasCostBasisB = lastB && lastB.bushels > 0 && typeof costBasisB === "number" && costBasisB > 0;
+  const pnlA = cropAutoPlayStatus?.pnlCentsA != null ? cropAutoPlayStatus.pnlCentsA
+    : hasCostBasisA && priceForPnl != null && priceForPnl > 0 && lastA && costBasisA != null
+      ? Math.round(lastA.bushels * (priceForPnl * 100 - costBasisA / lastA.bushels))
+      : (liveA ?? cropResultVs?.finalValueCentsA ?? 0) - (cropResultVs?.startValueCents ?? 0);
+  const pnlB = cropAutoPlayStatus?.pnlCentsB != null ? cropAutoPlayStatus.pnlCentsB
+    : hasCostBasisB && priceForPnl != null && priceForPnl > 0 && lastB && costBasisB != null
+      ? Math.round(lastB.bushels * (priceForPnl * 100 - costBasisB / lastB.bushels))
+      : (liveB ?? cropResultVs?.finalValueCentsB ?? 0) - (cropResultVs?.startValueCents ?? 0);
+  const avgCostA = cropAutoPlayStatus?.avgCostCentsPerBushelA ?? (hasCostBasisA && lastA && costBasisA != null ? costBasisA / lastA.bushels : undefined);
+  const avgCostB = cropAutoPlayStatus?.avgCostCentsPerBushelB ?? (hasCostBasisB && lastB && costBasisB != null ? costBasisB / lastB.bushels : undefined);
 
   // Long-term bu/acre over time (carry forward missing)
   const buSeriesA: { date: string; bu: number }[] = [];
@@ -560,22 +586,28 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
           <div style={{ display: "flex", gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
             <div>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameA} {liveA != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
-              <div style={{ fontWeight: 600, color: (liveA ?? cropResultVs.finalValueCentsA) >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
+              <div style={{ fontWeight: 600, color: pnlA >= 0 ? "#22c55e" : "#ef4444" }}>
                 ${((liveA ?? cropResultVs.finalValueCentsA) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
-                P/L {(liveA ?? cropResultVs.finalValueCentsA) >= cropResultVs.startValueCents ? "+" : ""}
-                ${(((liveA ?? cropResultVs.finalValueCentsA) - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                P/L {pnlA >= 0 ? "+" : ""}
+                ${(pnlA / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                {avgCostA != null && (
+                  <span style={{ marginLeft: 8 }}>avg {avgCostA.toFixed(2)}¢/bu</span>
+                )}
               </div>
             </div>
             <div>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameB} {liveB != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
-              <div style={{ fontWeight: 600, color: (liveB ?? cropResultVs.finalValueCentsB) >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
+              <div style={{ fontWeight: 600, color: pnlB >= 0 ? "#22c55e" : "#ef4444" }}>
                 ${((liveB ?? cropResultVs.finalValueCentsB) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
-                P/L {(liveB ?? cropResultVs.finalValueCentsB) >= cropResultVs.startValueCents ? "+" : ""}
-                ${(((liveB ?? cropResultVs.finalValueCentsB) - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                P/L {pnlB >= 0 ? "+" : ""}
+                ${(pnlB / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                {avgCostB != null && (
+                  <span style={{ marginLeft: 8 }}>avg {avgCostB.toFixed(2)}¢/bu</span>
+                )}
               </div>
             </div>
             <div style={{ marginLeft: "auto" }}>

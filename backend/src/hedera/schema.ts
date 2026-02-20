@@ -58,6 +58,7 @@ export type CropSnapshotPayload = {
   cashCents: number;
   bushels: number;
   valueCents: number;
+  costBasisCents?: number;
   trade?: string;
   size?: number;
   reasoning?: string | null;

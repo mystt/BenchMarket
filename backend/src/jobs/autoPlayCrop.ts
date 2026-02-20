@@ -51,6 +51,12 @@ export type CropAutoPlayStatus = {
   /** Portfolio value at current price (vs finalValueCents at decision time) */
   liveValueCentsA?: number;
   liveValueCentsB?: number;
+  /** Unrealized P/L (bushels * (currentPrice - avgCost)). When avgCost === currentPrice → P/L = 0 */
+  pnlCentsA?: number;
+  pnlCentsB?: number;
+  /** Average cost basis ¢/bu */
+  avgCostCentsPerBushelA?: number;
+  avgCostCentsPerBushelB?: number;
 };
 
 let cropAutoPlayState: {
@@ -106,8 +112,10 @@ async function runCropLoop(): Promise<void> {
           ({
             cashA: config.cropBankrollCents,
             bushelsA: 0,
+            costBasisA: 0,
             cashB: config.cropBankrollCents,
             bushelsB: 0,
+            costBasisB: 0,
             historyA: [],
             historyB: [],
           } satisfies CropVsState);

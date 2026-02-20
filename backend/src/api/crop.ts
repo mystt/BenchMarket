@@ -34,8 +34,19 @@ cropRouter.get("/auto-play-status", async (_req, res) => {
       const lastA = r.historyA[r.historyA.length - 1];
       const lastB = r.historyB[r.historyB.length - 1];
       status.currentPricePerBushel = price;
-      status.liveValueCentsA = lastA ? Math.round(lastA.cashCents + lastA.bushels * price * 100) : r.finalValueCentsA;
-      status.liveValueCentsB = lastB ? Math.round(lastB.cashCents + lastB.bushels * price * 100) : r.finalValueCentsB;
+      const priceCentsExact = price * 100;
+      status.liveValueCentsA = lastA ? Math.round(lastA.cashCents + lastA.bushels * priceCentsExact) : r.finalValueCentsA;
+      status.liveValueCentsB = lastB ? Math.round(lastB.cashCents + lastB.bushels * priceCentsExact) : r.finalValueCentsB;
+
+      // Avg cost & unrealized P/L: P/L = bushels * (currentPrice - avgCost). When avgCost === price → P/L = 0 (use exact price, not rounded)
+      if (lastA && lastA.bushels > 0 && typeof lastA.costBasisCents === "number" && lastA.costBasisCents > 0) {
+        status.avgCostCentsPerBushelA = lastA.costBasisCents / lastA.bushels;
+        status.pnlCentsA = Math.round(lastA.bushels * (priceCentsExact - status.avgCostCentsPerBushelA));
+      }
+      if (lastB && lastB.bushels > 0 && typeof lastB.costBasisCents === "number" && lastB.costBasisCents > 0) {
+        status.avgCostCentsPerBushelB = lastB.costBasisCents / lastB.bushels;
+        status.pnlCentsB = Math.round(lastB.bushels * (priceCentsExact - status.avgCostCentsPerBushelB));
+      }
     }
   }
   res.json(status);

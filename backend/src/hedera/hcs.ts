@@ -61,6 +61,7 @@ function compactCropSnapshot(snap: Record<string, unknown>): Record<string, unkn
     cashCents: snap.cashCents,
     bushels: snap.bushels,
     valueCents: snap.valueCents,
+    costBasisCents: snap.costBasisCents,
     trade: snap.trade,
     size: snap.size,
     // omit reasoning, reasonLongTerm, longTermBushelsPerAcre to fit 1024 bytes

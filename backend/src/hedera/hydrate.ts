@@ -69,8 +69,10 @@ export async function hydrateFromHedera(): Promise<void> {
         cropState = {
           cashA: snapA.cashCents,
           bushelsA: snapA.bushels,
+          costBasisA: snapA.costBasisCents ?? 0,
           cashB: snapB.cashCents,
           bushelsB: snapB.bushels,
+          costBasisB: snapB.costBasisCents ?? 0,
           historyA: cropState ? [...cropState.historyA, snapA] : [snapA],
           historyB: cropState ? [...cropState.historyB, snapB] : [snapB],
         };
@@ -113,12 +115,14 @@ function toPortfolioSnapshot(obj: Record<string, unknown>): CropPortfolioSnapsho
   const valueCents = Number(obj.valueCents ?? 0);
   if (!date) return null;
   if (pricePerBushel === 0 && bushels === 0 && cashCents === 0) return null;
+  const costBasisCents = obj.costBasisCents != null ? Number(obj.costBasisCents) : undefined;
   return {
     date,
     pricePerBushel,
     cashCents,
     bushels,
     valueCents,
+    costBasisCents: Number.isFinite(costBasisCents) ? costBasisCents : undefined,
     trade: (obj.trade === "buy" || obj.trade === "sell" || obj.trade === "hold" ? obj.trade : undefined),
     size: obj.size as number | undefined,
     reasoning: (obj.reasoning as string | null | undefined) ?? undefined,

@@ -16,6 +16,8 @@ export type CropPortfolioSnapshot = {
   cashCents: number;
   bushels: number;
   valueCents: number;
+  /** Cost basis of corn position (cents) — for accurate avg cost and P/L. avgCost¢/bu = costBasisCents / bushels */
+  costBasisCents?: number;
   trade?: CropTrade;
   size?: number;
   reasoning?: string | null;
@@ -195,8 +197,10 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
   const historyB: CropPortfolioSnapshot[] = [];
   let cashA = CROP_BANKROLL_CENTS;
   let bushelsA = 0;
+  let costBasisA = 0;
   let cashB = CROP_BANKROLL_CENTS;
   let bushelsB = 0;
+  let costBasisB = 0;
 
   let stepIndices: number[] =
     prices.length >= TEST_STEPS
@@ -227,10 +231,12 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       if (priceCentsPerBushel > 0 && spendCents > 0) {
         const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
         cashA -= buyBushels * priceCentsPerBushel;
+        costBasisA += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
         bushelsA += buyBushels;
       }
     } else if (parsedA.trade === "sell" && parsedA.size > 0) {
       const sellBushels = Math.min(bushelsA, Math.floor(parsedA.size));
+      if (bushelsA > 0) costBasisA = Math.round((costBasisA * (bushelsA - sellBushels)) / bushelsA);
       cashA += sellBushels * priceCentsPerBushel;
       bushelsA -= sellBushels;
     }
@@ -239,10 +245,12 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       if (priceCentsPerBushel > 0 && spendCents > 0) {
         const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
         cashB -= buyBushels * priceCentsPerBushel;
+        costBasisB += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
         bushelsB += buyBushels;
       }
     } else if (parsedB.trade === "sell" && parsedB.size > 0) {
       const sellBushels = Math.min(bushelsB, Math.floor(parsedB.size));
+      if (bushelsB > 0) costBasisB = Math.round((costBasisB * (bushelsB - sellBushels)) / bushelsB);
       cashB += sellBushels * priceCentsPerBushel;
       bushelsB -= sellBushels;
     }
@@ -255,6 +263,7 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       cashCents: cashA,
       bushels: bushelsA,
       valueCents: valueA,
+      costBasisCents: costBasisA,
       trade: parsedA.trade,
       size: parsedA.size,
       reasoning: parsedA.reasoning,
@@ -267,6 +276,7 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       cashCents: cashB,
       bushels: bushelsB,
       valueCents: valueB,
+      costBasisCents: costBasisB,
       trade: parsedB.trade,
       size: parsedB.size,
       reasoning: parsedB.reasoning,
@@ -301,8 +311,10 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
 export type CropVsState = {
   cashA: number;
   bushelsA: number;
+  costBasisA: number;
   cashB: number;
   bushelsB: number;
+  costBasisB: number;
   historyA: CropPortfolioSnapshot[];
   historyB: CropPortfolioSnapshot[];
 };
@@ -348,18 +360,22 @@ export async function runCropSingleStepVs(
 
   let cashA = state.cashA;
   let bushelsA = state.bushelsA;
+  let costBasisA = state.costBasisA ?? 0;
   let cashB = state.cashB;
   let bushelsB = state.bushelsB;
+  let costBasisB = state.costBasisB ?? 0;
 
   if (parsedA.trade === "buy" && parsedA.size > 0) {
     const spendCents = Math.min(cashA, Math.round(parsedA.size * 100));
     if (priceCentsPerBushel > 0 && spendCents > 0) {
       const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
       cashA -= buyBushels * priceCentsPerBushel;
+      costBasisA += buyBushels * priceCentsPerBushel;
       bushelsA += buyBushels;
     }
   } else if (parsedA.trade === "sell" && parsedA.size > 0) {
     const sellBushels = Math.min(bushelsA, Math.floor(parsedA.size));
+    if (bushelsA > 0) costBasisA = Math.round((costBasisA * (bushelsA - sellBushels)) / bushelsA);
     cashA += sellBushels * priceCentsPerBushel;
     bushelsA -= sellBushels;
   }
@@ -368,10 +384,12 @@ export async function runCropSingleStepVs(
     if (priceCentsPerBushel > 0 && spendCents > 0) {
       const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
       cashB -= buyBushels * priceCentsPerBushel;
+      costBasisB += buyBushels * priceCentsPerBushel;
       bushelsB += buyBushels;
     }
   } else if (parsedB.trade === "sell" && parsedB.size > 0) {
     const sellBushels = Math.min(bushelsB, Math.floor(parsedB.size));
+    if (bushelsB > 0) costBasisB = Math.round((costBasisB * (bushelsB - sellBushels)) / bushelsB);
     cashB += sellBushels * priceCentsPerBushel;
     bushelsB -= sellBushels;
   }
@@ -384,6 +402,7 @@ export async function runCropSingleStepVs(
     cashCents: cashA,
     bushels: bushelsA,
     valueCents: valueA,
+    costBasisCents: costBasisA,
     trade: parsedA.trade,
     size: parsedA.size,
     reasoning: parsedA.reasoning,
@@ -396,6 +415,7 @@ export async function runCropSingleStepVs(
     cashCents: cashB,
     bushels: bushelsB,
     valueCents: valueB,
+    costBasisCents: costBasisB,
     trade: parsedB.trade,
     size: parsedB.size,
     reasoning: parsedB.reasoning,
@@ -418,6 +438,7 @@ export async function runCropSingleStepVs(
       cashCents: cashA,
       bushels: bushelsA,
       valueCents: valueA,
+      costBasisCents: costBasisA,
       trade: parsedA.trade,
       size: parsedA.size,
       reasoning: parsedA.reasoning ?? undefined,
@@ -430,6 +451,7 @@ export async function runCropSingleStepVs(
       cashCents: cashB,
       bushels: bushelsB,
       valueCents: valueB,
+      costBasisCents: costBasisB,
       trade: parsedB.trade,
       size: parsedB.size,
       reasoning: parsedB.reasoning ?? undefined,
@@ -452,8 +474,10 @@ export async function runCropSingleStepVs(
   const newState: CropVsState = {
     cashA,
     bushelsA,
+    costBasisA,
     cashB,
     bushelsB,
+    costBasisB,
     historyA,
     historyB,
   };

@@ -89,6 +89,38 @@ function buildMessage(payload: AiResultPayload): string {
     return "";
   }
 
+  // blackjack_vs: drop optional fields (decisions, dealerCards) to fit; keep cards for history display
+  if (payload.domain === "blackjack_vs") {
+    const vs = payload as {
+      handIdA?: string; handIdB?: string; modelIdA?: string; modelIdB?: string; date?: string;
+      outcomeA?: string; outcomeB?: string; pnlA?: number; pnlB?: number;
+      playerACards?: string[]; playerBCards?: string[]; dealerUpcard?: string;
+      dealerCards?: string[]; dealerTotal?: number; betA?: number; betB?: number;
+    };
+    const compact = {
+      v: HCS_SCHEMA_VERSION,
+      ts: new Date().toISOString(),
+      domain: "blackjack_vs",
+      modelIdA: vs.modelIdA,
+      modelIdB: vs.modelIdB,
+      date: vs.date,
+      outcomeA: vs.outcomeA,
+      outcomeB: vs.outcomeB,
+      pnlA: vs.pnlA,
+      pnlB: vs.pnlB,
+      playerACards: vs.playerACards ?? [],
+      playerBCards: vs.playerBCards ?? [],
+      dealerUpcard: vs.dealerUpcard ?? null,
+      dealerTotal: vs.dealerTotal ?? null,
+      betA: vs.betA ?? null,
+      betB: vs.betB ?? null,
+    };
+    const compactMsg = JSON.stringify(compact);
+    if (new TextEncoder().encode(compactMsg).length <= MAX_MESSAGE_BYTES) return compactMsg;
+    console.warn("[HCS] blackjack_vs still too large after compact, skipping");
+    return "";
+  }
+
   console.warn("[HCS] Message too long, cannot compact:", payload.domain, "skipping");
   return "";
 }

@@ -1110,25 +1110,34 @@ export default function App() {
       fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelB)}&date=all`).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([dA, dB]) => {
-        const handsA = (dA?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
-        const handsB = (dB?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
+        const handsA = (dA?.hands ?? []) as Array<Record<string, unknown>>;
+        const handsB = (dB?.hands ?? []) as Array<Record<string, unknown>>;
+        const pick = (h: Record<string, unknown> | undefined, keys: string[]) => {
+          if (!h) return undefined;
+          for (const k of keys) if (h[k] !== undefined && h[k] !== null) return h[k];
+          return undefined;
+        };
         const n = Math.max(handsA.length, handsB.length);
         const merged: VsHandReasoningEntry[] = [];
         for (let i = 0; i < n; i++) {
           const a = handsA[i];
           const b = handsB[i];
+          const cardsA = (pick(a, ["playerCards", "player_cards"]) as string[] | undefined) ?? [];
+          const cardsB = (pick(b, ["playerCards", "player_cards"]) as string[] | undefined) ?? [];
+          const dealerUp = (pick(a, ["dealerUpcard", "dealer_upcard"]) ?? pick(b, ["dealerUpcard", "dealer_upcard"])) as string | null | undefined;
+          const dealerC = (pick(a, ["dealerCards", "dealer_cards"]) ?? pick(b, ["dealerCards", "dealer_cards"])) as string[] | undefined;
           merged.push({
             handIndex: i + 1,
             totalHands: n,
             playerA: a
-              ? { betCents: a.betCents ?? null, betReasoning: null, reasoningText: "", cards: a.playerCards ?? [], total: null, outcome: a.outcome ?? null, pnlCents: a.pnlCents ?? null }
+              ? { betCents: (pick(a, ["betCents", "bet_cents"]) as number | null | undefined) ?? null, betReasoning: null, reasoningText: "", cards: Array.isArray(cardsA) ? cardsA : [], total: null, outcome: (pick(a, ["outcome"]) as string | null | undefined) ?? null, pnlCents: (pick(a, ["pnlCents", "pnl_cents"]) as number | null | undefined) ?? null }
               : { betCents: null, betReasoning: null, reasoningText: "", cards: [], total: null, outcome: null, pnlCents: null },
             playerB: b
-              ? { betCents: b.betCents ?? null, betReasoning: null, reasoningText: "", cards: b.playerCards ?? [], total: null, outcome: b.outcome ?? null, pnlCents: b.pnlCents ?? null }
+              ? { betCents: (pick(b, ["betCents", "bet_cents"]) as number | null | undefined) ?? null, betReasoning: null, reasoningText: "", cards: Array.isArray(cardsB) ? cardsB : [], total: null, outcome: (pick(b, ["outcome"]) as string | null | undefined) ?? null, pnlCents: (pick(b, ["pnlCents", "pnl_cents"]) as number | null | undefined) ?? null }
               : { betCents: null, betReasoning: null, reasoningText: "", cards: [], total: null, outcome: null, pnlCents: null },
-            dealerUpcard: a?.dealerUpcard ?? b?.dealerUpcard ?? null,
-            dealerCards: a?.dealerCards ?? b?.dealerCards ?? [],
-            dealerTotal: a?.dealerTotal ?? b?.dealerTotal ?? null,
+            dealerUpcard: dealerUp ?? null,
+            dealerCards: Array.isArray(dealerC) ? dealerC : [],
+            dealerTotal: (pick(a, ["dealerTotal", "dealer_total"]) ?? pick(b, ["dealerTotal", "dealer_total"])) as number | null | undefined ?? null,
           });
         }
         setPersistedVsHandReasonings(merged);
@@ -2184,21 +2193,29 @@ export default function App() {
               {displayVsHands.map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
-                  {(entry.playerA.cards.length > 0 || entry.dealerUpcard) && (
+                  {(entry.playerA.cards.length > 0 || entry.dealerUpcard || entry.playerA.outcome) && (
                     <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                       <span style={{ color: "#a8a29e", fontSize: "0.7rem", marginRight: 4 }}>Cards:</span>
-                      {entry.playerA.cards.map((c, i) => (
-                        <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
-                      ))}
-                      {entry.playerA.total != null && <span style={{ color: "#d6d3d1", fontSize: "0.8rem" }}>({entry.playerA.total})</span>}
-                      {entry.dealerUpcard && (
+                      {entry.playerA.cards.length > 0 ? (
                         <>
-                          <span style={{ color: "#78716c", marginLeft: 4 }}>vs dealer</span>
-                          <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span>
+                          {entry.playerA.cards.map((c, i) => (
+                            <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
+                          ))}
+                          {entry.playerA.total != null && <span style={{ color: "#d6d3d1", fontSize: "0.8rem" }}>({entry.playerA.total})</span>}
+                          {entry.dealerUpcard && (
+                            <>
+                              <span style={{ color: "#78716c", marginLeft: 4 }}>vs dealer</span>
+                              <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span>
+                            </>
+                          )}
+                          {entry.dealerCards.length > 1 && (
+                            <span style={{ color: "#a8a29e", fontSize: "0.8rem" }}>→ dealer {entry.dealerCards.map((c) => formatCard(c)).join(", ")}{entry.dealerTotal != null && ` (${entry.dealerTotal})`}</span>
+                          )}
                         </>
-                      )}
-                      {entry.dealerCards.length > 1 && (
-                        <span style={{ color: "#a8a29e", fontSize: "0.8rem" }}>→ dealer {entry.dealerCards.map((c) => formatCard(c)).join(", ")}{entry.dealerTotal != null && ` (${entry.dealerTotal})`}</span>
+                      ) : entry.dealerUpcard ? (
+                        <span style={{ color: "#78716c" }}>vs dealer <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span></span>
+                      ) : (
+                        <span style={{ color: "#78716c" }}>—</span>
                       )}
                     </div>
                   )}
@@ -2234,21 +2251,29 @@ export default function App() {
               {displayVsHands.map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
-                  {(entry.playerB.cards.length > 0 || entry.dealerUpcard) && (
+                  {(entry.playerB.cards.length > 0 || entry.dealerUpcard || entry.playerB.outcome) && (
                     <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                       <span style={{ color: "#a8a29e", fontSize: "0.7rem", marginRight: 4 }}>Cards:</span>
-                      {entry.playerB.cards.map((c, i) => (
-                        <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
-                      ))}
-                      {entry.playerB.total != null && <span style={{ color: "#d6d3d1", fontSize: "0.8rem" }}>({entry.playerB.total})</span>}
-                      {entry.dealerUpcard && (
+                      {entry.playerB.cards.length > 0 ? (
                         <>
-                          <span style={{ color: "#78716c", marginLeft: 4 }}>vs dealer</span>
-                          <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span>
+                          {entry.playerB.cards.map((c, i) => (
+                            <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
+                          ))}
+                          {entry.playerB.total != null && <span style={{ color: "#d6d3d1", fontSize: "0.8rem" }}>({entry.playerB.total})</span>}
+                          {entry.dealerUpcard && (
+                            <>
+                              <span style={{ color: "#78716c", marginLeft: 4 }}>vs dealer</span>
+                              <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span>
+                            </>
+                          )}
+                          {entry.dealerCards.length > 1 && (
+                            <span style={{ color: "#a8a29e", fontSize: "0.8rem" }}>→ dealer {entry.dealerCards.map((c) => formatCard(c)).join(", ")}{entry.dealerTotal != null && ` (${entry.dealerTotal})`}</span>
+                          )}
                         </>
-                      )}
-                      {entry.dealerCards.length > 1 && (
-                        <span style={{ color: "#a8a29e", fontSize: "0.8rem" }}>→ dealer {entry.dealerCards.map((c) => formatCard(c)).join(", ")}{entry.dealerTotal != null && ` (${entry.dealerTotal})`}</span>
+                      ) : entry.dealerUpcard ? (
+                        <span style={{ color: "#78716c" }}>vs dealer <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)}</span></span>
+                      ) : (
+                        <span style={{ color: "#78716c" }}>—</span>
                       )}
                     </div>
                   )}

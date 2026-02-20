@@ -386,7 +386,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
   };
 
   const renderDecisionList = (history: CropHistoryEntry[], liveValueCents?: number, currentPricePerBushel?: number) => (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 280, overflowY: "auto" }}>
+    <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 480, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain" }}>
       {history.map((h, i) => {
         const isLast = i === history.length - 1;
         const useLiveValue = isLast && liveValueCents != null && currentPricePerBushel != null && currentPricePerBushel > 0;
@@ -647,11 +647,11 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
 
           <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #3f3f46", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
             <div>
-              <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameA} — Decision history</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameA} — Decision history {historyA.length > 0 && `(${historyA.length})`}</div>
               {renderDecisionList(historyA, liveA ?? undefined, currentPrice ?? undefined)}
             </div>
             <div>
-              <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameB} — Decision history</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameB} — Decision history {historyB.length > 0 && `(${historyB.length})`}</div>
               {renderDecisionList(historyB, liveB ?? undefined, currentPrice ?? undefined)}
             </div>
           </div>
@@ -807,7 +807,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
 
         <div style={{ borderTop: "1px solid #3f3f46", paddingTop: 12 }}>
           <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 8 }}>Your crop bets</div>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 200, overflowY: "auto" }}>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 200, overflowY: "auto", overflowAnchor: "none", overscrollBehavior: "contain" }}>
             {cropNextTestBets.map((b) => {
               const nameA = cropModels.find((m) => m.id === b.model_a_id)?.name ?? b.model_a_id;
               const nameB = cropModels.find((m) => m.id === b.model_b_id)?.name ?? b.model_b_id;
@@ -942,9 +942,11 @@ export default function App() {
   });
   const reasoningPanelRef = useRef<HTMLDivElement>(null);
   const reasoningEndRef = useRef<HTMLDivElement>(null);
+  const reasoningScrollRef = useRef<HTMLDivElement>(null);
   const [apiUnreachable, setApiUnreachable] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [leaderboardHistory, setLeaderboardHistory] = useState<LeaderboardHistorySeries[]>([]);
+  const [persistedHandHistory, setPersistedHandHistory] = useState<HandReasoningEntry[]>([]);
   const [marketBets, setMarketBets] = useState<PerformanceBet[]>([]);
   const [next3Bets, setNext3Bets] = useState<Next3Bet[]>([]);
   const [userBalanceCents, setUserBalanceCents] = useState<number | null>(null);
@@ -1070,6 +1072,33 @@ export default function App() {
         setLeaderboardHistory([]);
       });
   }, [today]);
+
+  useEffect(() => {
+    if (!selectedModel) return;
+    fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(selectedModel)}&date=${encodeURIComponent(today)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const hands = d?.hands ?? [];
+        setPersistedHandHistory(
+          hands.map((h: { handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; decision?: string | null; outcome?: string | null; pnlCents?: number | null }) => ({
+            handIndex: h.handIndex,
+            totalHands: h.totalHands,
+            betCents: h.betCents ?? null,
+            betReasoning: null,
+            playerCards: h.playerCards ?? [],
+            playerTotal: null,
+            dealerUpcard: h.dealerUpcard ?? null,
+            dealerCards: [],
+            dealerTotal: null,
+            decision: h.decision ?? null,
+            outcome: h.outcome ?? null,
+            pnlCents: h.pnlCents ?? null,
+            reasoningText: "",
+          }))
+        );
+      })
+      .catch(() => setPersistedHandHistory([]));
+  }, [API, selectedModel, today, lastResult]);
   useEffect(() => {
     refetchLeaderboard();
   }, [lastResult, refetchLeaderboard]);
@@ -1600,7 +1629,10 @@ export default function App() {
   }, [autoPlayStatus?.enabled, autoPlayStatus?.nextHandAt, autoPlayStatus?.modelAId, autoPlayStatus?.modelBId, now, streamingVs, runVsStreamWithModels]);
 
   useEffect(() => {
-    reasoningEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = reasoningScrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight - el.clientHeight;
+    }
   }, [streamState.handReasonings]);
 
   const tabStyle = (id: TabId) => ({
@@ -1865,20 +1897,23 @@ export default function App() {
               AI reasoning — scroll to review past hands
             </div>
             <div
+              ref={reasoningScrollRef}
               style={{
                 flex: 1,
                 overflowY: "auto",
                 overflowX: "hidden",
+                overflowAnchor: "none",
+                overscrollBehavior: "contain",
                 padding: 12,
                 display: "flex",
                 flexDirection: "column",
                 gap: 16,
               }}
             >
-              {streamState.handReasonings.length === 0 && (
+              {(streamState.handReasonings.length === 0 && persistedHandHistory.length === 0) && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streaming ? "Waiting for first hand…" : "—"}</div>
               )}
-              {streamState.handReasonings.map((entry, idx) => (
+              {(streamState.handReasonings.length > 0 ? streamState.handReasonings : persistedHandHistory).map((entry, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -1952,7 +1987,7 @@ export default function App() {
                         {entry.reasoningText}
                       </>
                     ) : (
-                      streaming && idx === streamState.handReasonings.length - 1 ? "…" : "—"
+                      streaming && streamState.handReasonings.length > 0 && idx === streamState.handReasonings.length - 1 ? "…" : "—"
                     )}
                   </div>
                   {(entry.decision || entry.outcome) && (
@@ -2091,7 +2126,7 @@ export default function App() {
             <div style={{ padding: "10px 14px", borderBottom: "1px solid #44403c", color: "#a8a29e", fontSize: "0.8rem", fontWeight: 600 }}>
               {models.find((m) => m.id === modelA)?.name ?? "Model A"} — scroll to review past hands
             </div>
-            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
               {vsState.vsHandReasonings.length === 0 && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}
@@ -2141,7 +2176,7 @@ export default function App() {
             <div style={{ padding: "10px 14px", borderBottom: "1px solid #44403c", color: "#a8a29e", fontSize: "0.8rem", fontWeight: 600 }}>
               {models.find((m) => m.id === modelB)?.name ?? "Model B"} — scroll to review past hands
             </div>
-            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
               {vsState.vsHandReasonings.length === 0 && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}

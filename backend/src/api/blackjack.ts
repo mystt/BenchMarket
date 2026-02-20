@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, getAIBetCents, type StreamEvent, type StreamEventVs } from "../domains/blackjack/service.js";
 import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
+import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
 
 export const blackjackRouter = Router();
 
@@ -18,6 +19,20 @@ blackjackRouter.get("/models", (_req, res) => {
 
 blackjackRouter.get("/auto-play-status", (_req, res) => {
   res.json(getAutoPlayStatus());
+});
+
+/** GET /api/blackjack/hand-history — persisted hand list from HCS. Query: date (YYYY-MM-DD), modelId. */
+blackjackRouter.get("/hand-history", async (req, res) => {
+  try {
+    const modelId = String(req.query.modelId ?? "").trim();
+    const date = String(req.query.date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+    if (!modelId) return res.status(400).json({ error: "modelId required" });
+    const hands = await fetchBlackjackHandHistory(modelId, date);
+    res.json({ modelId, date, hands });
+  } catch (e) {
+    console.error("GET /blackjack/hand-history error:", e);
+    res.status(500).json({ error: String(e instanceof Error ? e.message : e) });
+  }
 });
 
 blackjackRouter.get("/daily/:modelId", async (req, res) => {

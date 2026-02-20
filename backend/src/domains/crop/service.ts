@@ -119,8 +119,8 @@ export async function runCropTest(modelId: string): Promise<CropTestResult> {
   // Use up to TEST_STEPS data points (e.g. last 10 days), spread across the series
   let stepIndices: number[] =
     prices.length >= TEST_STEPS
-      ? Array.from({ length: TEST_STEPS }, (_, i) => Math.min(Math.floor((prices.length * (i + 1)) / (TEST_STEPS + 1)), prices.length - 1))
-      : prices.map((_, i) => i);
+      ? Array.from({ length: TEST_STEPS }, (_: unknown, i: number) => Math.min(Math.floor((prices.length * (i + 1)) / (TEST_STEPS + 1)), prices.length - 1))
+      : prices.map((_: CornPricePoint, i: number) => i);
   if (stepIndices.length === 0) stepIndices = [0];
 
   for (let i = 0; i < stepIndices.length; i++) {
@@ -198,8 +198,8 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
 
   let stepIndices: number[] =
     prices.length >= TEST_STEPS
-      ? Array.from({ length: TEST_STEPS }, (_, i) => Math.min(Math.floor((prices.length * (i + 1)) / (TEST_STEPS + 1)), prices.length - 1))
-      : prices.map((_, i) => i);
+      ? Array.from({ length: TEST_STEPS }, (_: unknown, i: number) => Math.min(Math.floor((prices.length * (i + 1)) / (TEST_STEPS + 1)), prices.length - 1))
+      : prices.map((_: CornPricePoint, i: number) => i);
   if (stepIndices.length === 0) stepIndices = [0];
 
   for (let i = 0; i < stepIndices.length; i++) {

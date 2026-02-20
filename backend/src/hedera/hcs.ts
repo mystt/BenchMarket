@@ -55,6 +55,7 @@ export async function submitAiResult(payload: AiResultPayload): Promise<void> {
   const c = getClient();
   if (!c) return;
   const topicId = config.hederaTopicId!;
+  const client = c;
   const message = JSON.stringify({ ts: new Date().toISOString(), ...payload });
   const bytes = new TextEncoder().encode(message);
   if (bytes.length > MAX_MESSAGE_BYTES) {
@@ -70,7 +71,7 @@ export async function submitAiResult(payload: AiResultPayload): Promise<void> {
       const tx = new TopicMessageSubmitTransaction()
         .setTopicId(TopicId.fromString(topicId))
         .setMessage(msg);
-      await tx.execute(c);
+      await tx.execute(client);
     } catch (e) {
       console.warn("[HCS] Submit failed:", e);
     }

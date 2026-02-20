@@ -1,0 +1,17 @@
+{
+  "name": "ai-benchmark-market",
+  "private": true,
+  "description": "Market-based AI benchmark — Blackjack, Sports, Crops on Hedera",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "start:backend": "cd backend && npm run start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "db:migrate": "cd backend && npm run db:migrate",
+    "postinstall": "npm install --prefix backend && npm install --prefix frontend"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

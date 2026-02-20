@@ -406,10 +406,14 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
     );
   };
 
-  const renderDecisionList = (history: CropHistoryEntry[], liveValueCents?: number, currentPricePerBushel?: number) => (
+  const renderDecisionList = (history: CropHistoryEntry[], liveValueCents?: number, currentPricePerBushel?: number) => {
+    const total = history.length;
+    const reversed = [...history].reverse();
+    return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 480, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain" }}>
-      {history.map((h, i) => {
-        const isLast = i === history.length - 1;
+      {reversed.map((h, i) => {
+        const decisionNum = total - i;
+        const isLast = i === 0;
         const useLiveValue = isLast && liveValueCents != null && currentPricePerBushel != null && currentPricePerBushel > 0;
         const displayValueCents = useLiveValue ? liveValueCents : h.valueCents;
         const displayPrice = useLiveValue ? currentPricePerBushel : h.pricePerBushel;
@@ -421,7 +425,8 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
         const cornValueCents = h.bushels * displayPrice * 100;
         const exposurePct = displayValueCents > 0 ? Math.round((cornValueCents / displayValueCents) * 100) : 0;
         return (
-          <li key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46" }}>
+          <li key={total - 1 - i} style={{ marginBottom: 10, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46" }}>
+            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Decision {decisionNum} of {total}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", alignItems: "baseline", marginBottom: 4 }}>
               <span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>{h.date}{useLiveValue ? " (live)" : ""}</span>
               <span style={{ fontWeight: 600, color: h.trade === "buy" ? "#22c55e" : h.trade === "sell" ? "#ef4444" : "#a1a1aa" }}>
@@ -451,7 +456,8 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
         );
       })}
     </ul>
-  );
+    );
+  };
 
   return (
     <div style={{ maxWidth: 640, padding: "24px 0" }}>

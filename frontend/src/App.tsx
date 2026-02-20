@@ -1112,7 +1112,7 @@ export default function App() {
       .then(([dA, dB]) => {
         const handsA = (dA?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
         const handsB = (dB?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
-        const n = Math.min(handsA.length, handsB.length);
+        const n = Math.max(handsA.length, handsB.length);
         const merged: VsHandReasoningEntry[] = [];
         for (let i = 0; i < n; i++) {
           const a = handsA[i];
@@ -1120,11 +1120,15 @@ export default function App() {
           merged.push({
             handIndex: i + 1,
             totalHands: n,
-            playerA: { betCents: a.betCents ?? null, betReasoning: null, reasoningText: "", cards: a.playerCards ?? [], total: null, outcome: a.outcome ?? null, pnlCents: a.pnlCents ?? null },
-            playerB: { betCents: b.betCents ?? null, betReasoning: null, reasoningText: "", cards: b.playerCards ?? [], total: null, outcome: b.outcome ?? null, pnlCents: b.pnlCents ?? null },
-            dealerUpcard: a.dealerUpcard ?? b.dealerUpcard ?? null,
-            dealerCards: a.dealerCards ?? b.dealerCards ?? [],
-            dealerTotal: a.dealerTotal ?? b.dealerTotal ?? null,
+            playerA: a
+              ? { betCents: a.betCents ?? null, betReasoning: null, reasoningText: "", cards: a.playerCards ?? [], total: null, outcome: a.outcome ?? null, pnlCents: a.pnlCents ?? null }
+              : { betCents: null, betReasoning: null, reasoningText: "", cards: [], total: null, outcome: null, pnlCents: null },
+            playerB: b
+              ? { betCents: b.betCents ?? null, betReasoning: null, reasoningText: "", cards: b.playerCards ?? [], total: null, outcome: b.outcome ?? null, pnlCents: b.pnlCents ?? null }
+              : { betCents: null, betReasoning: null, reasoningText: "", cards: [], total: null, outcome: null, pnlCents: null },
+            dealerUpcard: a?.dealerUpcard ?? b?.dealerUpcard ?? null,
+            dealerCards: a?.dealerCards ?? b?.dealerCards ?? [],
+            dealerTotal: a?.dealerTotal ?? b?.dealerTotal ?? null,
           });
         }
         setPersistedVsHandReasonings(merged);

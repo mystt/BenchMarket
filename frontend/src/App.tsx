@@ -380,7 +380,10 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
       {history.map((h, i) => {
         const tradeLabel = h.trade === "buy" ? "Buy" : h.trade === "sell" ? "Sell" : "Hold";
         const sizeLabel = h.trade === "buy" && h.size != null ? `$${Number(h.size).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : h.trade === "sell" && h.size != null ? `${Number(h.size).toFixed(0)} bushels` : "";
-        const valueAfter = (h.valueCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const cashDollars = (h.cashCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const cornValueDollars = ((h.bushels * h.pricePerBushel)).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const totalDollars = (h.valueCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const exposurePct = h.valueCents > 0 ? Math.round((h.bushels * h.pricePerBushel * 100) / h.valueCents) : 0;
         return (
           <li key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", alignItems: "baseline", marginBottom: 4 }}>
@@ -389,11 +392,18 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
                 {tradeLabel}{sizeLabel ? ` ${sizeLabel}` : ""}
               </span>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>
-                Corn ${h.pricePerBushel.toFixed(2)}/bu · Portfolio ${valueAfter}
+                Corn {(h.pricePerBushel * 100).toFixed(2)}¢/bu
               </span>
               {h.longTermBushelsPerAcre != null && (
                 <span style={{ color: "#a78bfa", fontSize: "0.85rem" }}>Long-term: {Number(h.longTermBushelsPerAcre).toFixed(1)} bu/acre</span>
               )}
+            </div>
+            <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
+              Portfolio: <span style={{ color: "#e2e8f0" }}>${cashDollars} cash</span>
+              {h.bushels > 0 && (
+                <> · <span style={{ color: "#fbbf24" }}>{h.bushels.toLocaleString()} bu corn</span> (<span style={{ color: "#e2e8f0" }}>${cornValueDollars}</span>)</>
+              )}
+              <> · {exposurePct}% corn exposure · <span style={{ fontWeight: 600 }}>${totalDollars} total</span></>
             </div>
             {h.reasoning && (
               <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #3f3f46" }}>

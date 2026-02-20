@@ -35,6 +35,19 @@ export async function fetchCornPricesForTrading(): Promise<CornPricePoint[]> {
   return fetchCornPrices();
 }
 
+/** Latest corn price in $/bu (for live portfolio valuation). Returns null on error. */
+export async function fetchLatestCornPrice(): Promise<number | null> {
+  try {
+    const points = await fetchCornPricesForTrading();
+    if (points.length > 0) return points[points.length - 1].pricePerBushel;
+    const daily = await fetchCornPrices();
+    if (daily.length > 0) return daily[daily.length - 1].pricePerBushel;
+  } catch {
+    /* */
+  }
+  return null;
+}
+
 export async function fetchCornPrices(): Promise<CornPricePoint[]> {
   const yahooFinance = new YahooFinance();
   const period1 = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

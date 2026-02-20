@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { fetchCornPrices } from "../sources/corn.js";
+import { fetchCornPrices, fetchLatestCornPrice } from "../sources/corn.js";
 import { runCropTest, runCropTestVs } from "../domains/crop/service.js";
 import { getCropAutoPlayStatus } from "../jobs/autoPlayCrop.js";
 import {
@@ -24,9 +24,21 @@ cropRouter.get("/models", (_req, res) => {
   res.json({ models: CROP_MODELS });
 });
 
-/** GET /api/crop/auto-play-status — next run time, last result, models. */
-cropRouter.get("/auto-play-status", (_req, res) => {
-  res.json(getCropAutoPlayStatus());
+/** GET /api/crop/auto-play-status — next run time, last result, models. Includes live portfolio value at current corn price. */
+cropRouter.get("/auto-play-status", async (_req, res) => {
+  const status = getCropAutoPlayStatus();
+  const r = status.lastResult;
+  if (r?.historyA?.length || r?.historyB?.length) {
+    const price = await fetchLatestCornPrice();
+    if (price != null && price > 0) {
+      const lastA = r.historyA[r.historyA.length - 1];
+      const lastB = r.historyB[r.historyB.length - 1];
+      status.currentPricePerBushel = price;
+      status.liveValueCentsA = lastA ? Math.round(lastA.cashCents + lastA.bushels * price * 100) : r.finalValueCentsA;
+      status.liveValueCentsB = lastB ? Math.round(lastB.cashCents + lastB.bushels * price * 100) : r.finalValueCentsB;
+    }
+  }
+  res.json(status);
 });
 
 /** GET /api/crop/corn-prices — last ~30 days of US corn futures (for charts or display). */

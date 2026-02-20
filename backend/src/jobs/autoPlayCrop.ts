@@ -46,6 +46,11 @@ export type CropAutoPlayStatus = {
   lastResult: CropTestResultVs | null;
   lastError: string | null;
   running: boolean;
+  /** Current corn $/bu — used for live portfolio value */
+  currentPricePerBushel?: number;
+  /** Portfolio value at current price (vs finalValueCents at decision time) */
+  liveValueCentsA?: number;
+  liveValueCentsB?: number;
 };
 
 let cropAutoPlayState: {

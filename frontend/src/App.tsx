@@ -146,6 +146,9 @@ type CropAutoPlayStatus = {
   lastResult: CropTestResultVs | null;
   lastError?: string | null;
   running?: boolean;
+  currentPricePerBushel?: number;
+  liveValueCentsA?: number;
+  liveValueCentsB?: number;
 };
 
 function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalanceChange?: () => void }) {
@@ -303,18 +306,23 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
   const innerH = chartHeight - padding.top - padding.bottom;
   const historyA = cropResultVs?.historyA ?? [];
   const historyB = cropResultVs?.historyB ?? [];
-  const allValues = [...historyA.map((h) => h.valueCents), ...historyB.map((h) => h.valueCents)];
+  const liveA = cropAutoPlayStatus?.liveValueCentsA;
+  const liveB = cropAutoPlayStatus?.liveValueCentsB;
+  const currentPrice = cropAutoPlayStatus?.currentPricePerBushel;
+  const valsA = liveA != null && historyA.length > 0 ? [...historyA.map((h) => h.valueCents), liveA] : historyA.map((h) => h.valueCents);
+  const valsB = liveB != null && historyB.length > 0 ? [...historyB.map((h) => h.valueCents), liveB] : historyB.map((h) => h.valueCents);
+  const allValues = [...valsA, ...valsB];
   const minV = allValues.length ? Math.min(...allValues) : 0;
   const maxV = allValues.length ? Math.max(...allValues) : 10000000;
   const range = maxV - minV || 1;
-  const pointsA = historyA.map((h, i) => {
-    const x = padding.left + (i / Math.max(1, historyA.length - 1)) * innerW;
-    const y = padding.top + innerH - ((h.valueCents - minV) / range) * innerH;
+  const pointsA = valsA.map((v, i) => {
+    const x = padding.left + (i / Math.max(1, valsA.length - 1)) * innerW;
+    const y = padding.top + innerH - ((v - minV) / range) * innerH;
     return `${x},${y}`;
   }).join(" ");
-  const pointsB = historyB.map((h, i) => {
-    const x = padding.left + (i / Math.max(1, historyB.length - 1)) * innerW;
-    const y = padding.top + innerH - ((h.valueCents - minV) / range) * innerH;
+  const pointsB = valsB.map((v, i) => {
+    const x = padding.left + (i / Math.max(1, valsB.length - 1)) * innerW;
+    const y = padding.top + innerH - ((v - minV) / range) * innerH;
     return `${x},${y}`;
   }).join(" ");
 
@@ -377,24 +385,28 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
     );
   };
 
-  const renderDecisionList = (history: CropHistoryEntry[]) => (
+  const renderDecisionList = (history: CropHistoryEntry[], liveValueCents?: number, currentPricePerBushel?: number) => (
     <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 280, overflowY: "auto" }}>
       {history.map((h, i) => {
+        const isLast = i === history.length - 1;
+        const useLiveValue = isLast && liveValueCents != null && currentPricePerBushel != null && currentPricePerBushel > 0;
+        const displayValueCents = useLiveValue ? liveValueCents : h.valueCents;
+        const displayPrice = useLiveValue ? currentPricePerBushel : h.pricePerBushel;
         const tradeLabel = h.trade === "buy" ? "Buy" : h.trade === "sell" ? "Sell" : "Hold";
         const sizeLabel = h.trade === "buy" && h.size != null ? `$${Number(h.size).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : h.trade === "sell" && h.size != null ? `${Number(h.size).toFixed(0)} bushels` : "";
         const cashDollars = (h.cashCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
-        const cornValueDollars = ((h.bushels * h.pricePerBushel)).toLocaleString("en-US", { minimumFractionDigits: 2 });
-        const totalDollars = (h.valueCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
-        const exposurePct = h.valueCents > 0 ? Math.round((h.bushels * h.pricePerBushel * 100) / h.valueCents) : 0;
+        const cornValueDollars = (h.bushels * displayPrice).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const totalDollars = (displayValueCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+        const exposurePct = displayValueCents > 0 ? Math.round((h.bushels * displayPrice * 100) / displayValueCents) : 0;
         return (
           <li key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", alignItems: "baseline", marginBottom: 4 }}>
-              <span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>{h.date}</span>
+              <span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>{h.date}{useLiveValue ? " (live)" : ""}</span>
               <span style={{ fontWeight: 600, color: h.trade === "buy" ? "#22c55e" : h.trade === "sell" ? "#ef4444" : "#a1a1aa" }}>
                 {tradeLabel}{sizeLabel ? ` ${sizeLabel}` : ""}
               </span>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>
-                Corn {(h.pricePerBushel * 100).toFixed(2)}¢/bu
+                Corn {(displayPrice * 100).toFixed(2)}¢/bu
               </span>
               {h.longTermBushelsPerAcre != null && (
                 <span style={{ color: "#a78bfa", fontSize: "0.85rem" }}>Long-term: {Number(h.longTermBushelsPerAcre).toFixed(1)} bu/acre</span>
@@ -546,23 +558,23 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
         <div style={{ marginTop: 24, padding: 16, background: "#18181b", borderRadius: 12, border: "1px solid #3f3f46" }}>
           <div style={{ display: "flex", gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
             <div>
-              <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameA} end</span>
-              <div style={{ fontWeight: 600, color: cropResultVs.finalValueCentsA >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
-                ${(cropResultVs.finalValueCentsA / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameA} {liveA != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
+              <div style={{ fontWeight: 600, color: (liveA ?? cropResultVs.finalValueCentsA) >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
+                ${((liveA ?? cropResultVs.finalValueCentsA) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
-                P/L {cropResultVs.finalValueCentsA >= cropResultVs.startValueCents ? "+" : ""}
-                ${((cropResultVs.finalValueCentsA - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                P/L {(liveA ?? cropResultVs.finalValueCentsA) >= cropResultVs.startValueCents ? "+" : ""}
+                ${(((liveA ?? cropResultVs.finalValueCentsA) - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
             </div>
             <div>
-              <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameB} end</span>
-              <div style={{ fontWeight: 600, color: cropResultVs.finalValueCentsB >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
-                ${(cropResultVs.finalValueCentsB / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameB} {liveB != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
+              <div style={{ fontWeight: 600, color: (liveB ?? cropResultVs.finalValueCentsB) >= cropResultVs.startValueCents ? "#22c55e" : "#ef4444" }}>
+                ${((liveB ?? cropResultVs.finalValueCentsB) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
-                P/L {cropResultVs.finalValueCentsB >= cropResultVs.startValueCents ? "+" : ""}
-                ${((cropResultVs.finalValueCentsB - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                P/L {(liveB ?? cropResultVs.finalValueCentsB) >= cropResultVs.startValueCents ? "+" : ""}
+                ${(((liveB ?? cropResultVs.finalValueCentsB) - cropResultVs.startValueCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
             </div>
             <div style={{ marginLeft: "auto" }}>
@@ -635,11 +647,11 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
           <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #3f3f46", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
             <div>
               <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameA} — Decision history</div>
-              {renderDecisionList(historyA)}
+              {renderDecisionList(historyA, liveA ?? undefined, currentPrice ?? undefined)}
             </div>
             <div>
               <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>{nameB} — Decision history</div>
-              {renderDecisionList(historyB)}
+              {renderDecisionList(historyB, liveB ?? undefined, currentPrice ?? undefined)}
             </div>
           </div>
         </div>

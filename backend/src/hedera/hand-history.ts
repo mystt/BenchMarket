@@ -37,11 +37,12 @@ export async function fetchBlackjackHandHistory(
   return getBlackjackHands(modelId, dateFilter);
 }
 
-/** Parse all topic messages into hands by model. Used by hydrate and fallback fetch. */
+/** Parse messages into hands by model. Pass preFetched to use existing messages (avoids double fetch in hydrate). */
 export async function parseAllMessagesToHandsByModel(
-  dateFilter: string | null
+  dateFilter: string | null,
+  preFetched?: { consensus_timestamp: string; sequence_number: number; message: string }[]
 ): Promise<Map<string, BlackjackHandEntry[]>> {
-  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
+  const messages = preFetched ?? (await fetchTopicMessages({ order: "asc", maxMessages: 10000 }));
   const byModel = new Map<string, BlackjackHandEntry[]>();
 
   const push = (modelId: string, entry: Omit<BlackjackHandEntry, "handIndex" | "totalHands">) => {
@@ -77,8 +78,8 @@ export async function parseAllMessagesToHandsByModel(
           pnlCents: typeof get(parsed, "pnlCents", "pnl_cents") === "number" ? (get(parsed, "pnlCents", "pnl_cents") as number) : null,
         });
       } else if (domain === "blackjack_vs") {
-        const modelAId = String(get(parsed, "modelIdA", "model_id_a") ?? "").trim();
-        const modelBId = String(get(parsed, "modelBId", "model_b_id") ?? "").trim();
+        const modelAId = String(get(parsed, "modelIdA", "modelAId", "model_id_a") ?? "").trim();
+        const modelBId = String(get(parsed, "modelIdB", "modelBId", "model_b_id") ?? "").trim();
         const d = String(get(parsed, "date") ?? "").slice(0, 10);
         if (dateFilter != null && d !== dateFilter) continue;
         const pnlA = typeof get(parsed, "pnlA", "pnl_a") === "number" ? (get(parsed, "pnlA", "pnl_a") as number) : 0;

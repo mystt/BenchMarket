@@ -13,8 +13,9 @@ import type { CropVsState, CropPortfolioSnapshot } from "../domains/crop/service
 
 export async function hydrateFromHedera(): Promise<void> {
   if (!config.hederaTopicId) return;
-  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
+  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 10000 });
   if (messages.length === 0) return;
+  console.log(`[HCS Hydrate] Fetched ${messages.length} messages from topic`);
 
   let blackjackCount = 0;
   let blackjackVsCount = 0;
@@ -87,11 +88,14 @@ export async function hydrateFromHedera(): Promise<void> {
     recomputeDailyBankrollsFromHands(config.blackjackDailyCents);
     console.log(`[HCS Hydrate] Loaded ${blackjackHands.length} blackjack hands`);
   }
-  const handHistoryByModel = await parseAllMessagesToHandsByModel(null);
+  const handHistoryByModel = await parseAllMessagesToHandsByModel(null, messages);
   if (handHistoryByModel.size > 0) {
     loadBlackjackHandHistoryFromHcs(handHistoryByModel);
     const total = Array.from(handHistoryByModel.values()).reduce((s, list) => s + list.length, 0);
-    console.log(`[HCS Hydrate] Loaded blackjack hand history: ${total} hands for ${handHistoryByModel.size} models`);
+    const perModel = Array.from(handHistoryByModel.entries()).map(([id, list]) => `${id}:${list.length}`).join(", ");
+    console.log(`[HCS Hydrate] Loaded blackjack hand history: ${total} hands for ${handHistoryByModel.size} models (${perModel})`);
+  } else if (blackjackCount > 0 || blackjackVsCount > 0) {
+    console.warn(`[HCS Hydrate] Blackjack messages found (${blackjackCount}+${blackjackVsCount}) but parseAllMessagesToHandsByModel returned 0 hands - check message format`);
   }
   if (cropState && cropModelAId && cropModelBId) {
     setCropVsStateFromHydration(cropState, { modelAId: cropModelAId, modelBId: cropModelBId });

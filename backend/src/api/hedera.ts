@@ -26,6 +26,26 @@ hederaRouter.get("/sync", async (_req, res) => {
   }
 });
 
+/** GET /api/hedera/bj-hand-store — blackjack hand counts per model (in-memory store, for debugging). */
+hederaRouter.get("/bj-hand-store", async (_req, res) => {
+  if (!config.hederaTopicId) {
+    return res.status(400).json({ error: "HEDERA_TOPIC_ID not configured" });
+  }
+  try {
+    const { getBlackjackHandModelIds, getBlackjackHands } = await import("../hedera/blackjack-hand-store.js");
+    const modelIds = getBlackjackHandModelIds();
+    const byModel: Record<string, number> = {};
+    for (const id of modelIds) {
+      byModel[id] = getBlackjackHands(id, null).length;
+    }
+    res.json({ byModel, totalHands: Object.values(byModel).reduce((a, b) => a + b, 0) });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("GET /api/hedera/bj-hand-store:", e);
+    res.status(500).json({ error: msg });
+  }
+});
+
 /** GET /api/hedera/topic-stats — message counts by domain for debugging persistence. */
 hederaRouter.get("/topic-stats", async (_req, res) => {
   if (!config.hederaTopicId) {

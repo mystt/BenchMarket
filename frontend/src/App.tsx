@@ -2170,7 +2170,7 @@ export default function App() {
         </div>
       )}
       {models.length >= 2 && (() => {
-        const displayVsHands: VsHandReasoningEntry[] =
+        const raw: VsHandReasoningEntry[] =
           vsState.vsHandReasonings.length > 0
             ? [...persistedVsHandReasonings, ...vsState.vsHandReasonings].map((e, i, arr) => ({
                 ...e,
@@ -2178,7 +2178,8 @@ export default function App() {
                 totalHands: arr.length,
               }))
             : persistedVsHandReasonings;
-        const lastStreamingIdx = vsState.vsHandReasonings.length > 0 ? persistedVsHandReasonings.length + vsState.vsHandReasonings.length - 1 : -1;
+        const displayVsHands = raw.slice().reverse();
+        const lastStreamingIdx = vsState.vsHandReasonings.length > 0 ? 0 : -1;
         return (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 1000, marginBottom: 24, minHeight: 320 }}>
           {/* Model A: scrollable reasoning — one block per hand with bet + play reasoning */}

@@ -411,7 +411,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
     <div style={{ maxWidth: 640, padding: "24px 0" }}>
       <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Crop prediction AI benchmark</h2>
       <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
-        US corn futures. Two AIs each get $100k fake capital and make buy/sell decisions over ~30s on the same real price data. Auto-play runs one VS test every 5 min.
+        US corn futures. Two AIs each get $100k fake capital and make buy/sell decisions. Every 5 min, each agent gets one decision on the latest corn price.
       </p>
 
       {cropAutoPlayStatus?.enabled && (
@@ -423,7 +423,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               : "— vs —"}
           </div>
           {cropAutoPlayStatus.running && (
-            <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#a78bfa" }}>Run in progress (~30s)…</div>
+            <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#a78bfa" }}>Run in progress…</div>
           )}
           {!cropAutoPlayStatus.running && (
             <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#fde047" }}>
@@ -554,7 +554,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
             <span><span style={{ color: "#f59e0b", fontWeight: 600 }}>—</span> {nameB}</span>
           </div>
           <div style={{ marginTop: 12, fontSize: "0.8rem", color: "#71717a" }}>
-            {historyA.length} steps · Corn price data: {cropResultVs.prices.length} days
+            {historyA.length} decisions · Corn price data: {cropResultVs.prices.length} days
           </div>
 
           <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #3f3f46" }}>

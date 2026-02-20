@@ -4,8 +4,9 @@ import { fetchCornPrices, type CornPricePoint } from "../../sources/corn.js";
 import { settleCropNextTestBets } from "./market.js";
 
 const CROP_BANKROLL_CENTS = config.cropBankrollCents;
-const TEST_STEPS = 10; // number of trading steps in a ~30s run (each step: fetch price + AI call)
-const MS_PER_STEP = 2800; // ~3s per step so total ~30s
+const TEST_STEPS = 10; // number of trading steps (legacy multi-step run)
+const MS_PER_STEP = 2800; // ~3s per step (legacy)
+const MAX_HISTORY = 200; // cap accumulated history for single-step mode
 
 export type CropTrade = "buy" | "sell" | "hold";
 export type CropPortfolioSnapshot = {
@@ -293,4 +294,138 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
     finalValueCentsA,
     finalValueCentsB,
   };
+}
+
+/** State for continuous single-step crop VS (one decision per run). */
+export type CropVsState = {
+  cashA: number;
+  bushelsA: number;
+  cashB: number;
+  bushelsB: number;
+  historyA: CropPortfolioSnapshot[];
+  historyB: CropPortfolioSnapshot[];
+};
+
+function trimHistory<T>(arr: T[], max: number): T[] {
+  if (arr.length <= max) return arr;
+  return arr.slice(-max);
+}
+
+/**
+ * Single-step VS: fetch latest corn price, ask both agents once, apply trades.
+ * Returns result and new state. No throttling — one AI call per model.
+ */
+export async function runCropSingleStepVs(
+  modelIdA: string,
+  modelIdB: string,
+  state: CropVsState
+): Promise<{ result: CropTestResultVs; newState: CropVsState }> {
+  const providerA = getAIProvider(modelIdA);
+  const providerB = getAIProvider(modelIdB);
+  if (!providerA) throw new Error(`Unknown AI model: ${modelIdA}`);
+  if (!providerB) throw new Error(`Unknown AI model: ${modelIdB}`);
+  if (modelIdA === modelIdB) throw new Error("Choose two different models");
+
+  const prices = await fetchCornPrices();
+  if (prices.length < 1) throw new Error("No corn price data");
+
+  const point = prices[prices.length - 1];
+  const date = point.date;
+  const pricePerBushel = point.pricePerBushel;
+  const priceCentsPerBushel = Math.round(pricePerBushel * 100);
+
+  const promptA = buildCropPrompt(date, pricePerBushel, state.cashA, state.bushelsA);
+  const promptB = buildCropPrompt(date, pricePerBushel, state.cashB, state.bushelsB);
+  const [responseA, responseB] = await Promise.all([
+    providerA.ask(promptA),
+    providerB.ask(promptB),
+  ]);
+  const textA = responseA.raw ?? [responseA.decision, responseA.reasoning].filter(Boolean).join(" ");
+  const textB = responseB.raw ?? [responseB.decision, responseB.reasoning].filter(Boolean).join(" ");
+  const parsedA = parseCropResponse(textA);
+  const parsedB = parseCropResponse(textB);
+
+  let cashA = state.cashA;
+  let bushelsA = state.bushelsA;
+  let cashB = state.cashB;
+  let bushelsB = state.bushelsB;
+
+  if (parsedA.trade === "buy" && parsedA.size > 0) {
+    const spendCents = Math.min(cashA, Math.round(parsedA.size * 100));
+    if (priceCentsPerBushel > 0 && spendCents > 0) {
+      const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
+      cashA -= buyBushels * priceCentsPerBushel;
+      bushelsA += buyBushels;
+    }
+  } else if (parsedA.trade === "sell" && parsedA.size > 0) {
+    const sellBushels = Math.min(bushelsA, Math.floor(parsedA.size));
+    cashA += sellBushels * priceCentsPerBushel;
+    bushelsA -= sellBushels;
+  }
+  if (parsedB.trade === "buy" && parsedB.size > 0) {
+    const spendCents = Math.min(cashB, Math.round(parsedB.size * 100));
+    if (priceCentsPerBushel > 0 && spendCents > 0) {
+      const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
+      cashB -= buyBushels * priceCentsPerBushel;
+      bushelsB += buyBushels;
+    }
+  } else if (parsedB.trade === "sell" && parsedB.size > 0) {
+    const sellBushels = Math.min(bushelsB, Math.floor(parsedB.size));
+    cashB += sellBushels * priceCentsPerBushel;
+    bushelsB -= sellBushels;
+  }
+
+  const valueA = cashA + bushelsA * priceCentsPerBushel;
+  const valueB = cashB + bushelsB * priceCentsPerBushel;
+  const snapshotA: CropPortfolioSnapshot = {
+    date,
+    pricePerBushel,
+    cashCents: cashA,
+    bushels: bushelsA,
+    valueCents: valueA,
+    trade: parsedA.trade,
+    size: parsedA.size,
+    reasoning: parsedA.reasoning,
+    longTermBushelsPerAcre: parsedA.longTermBushelsPerAcre ?? undefined,
+    reasonLongTerm: parsedA.reasonLongTerm ?? undefined,
+  };
+  const snapshotB: CropPortfolioSnapshot = {
+    date,
+    pricePerBushel,
+    cashCents: cashB,
+    bushels: bushelsB,
+    valueCents: valueB,
+    trade: parsedB.trade,
+    size: parsedB.size,
+    reasoning: parsedB.reasoning,
+    longTermBushelsPerAcre: parsedB.longTermBushelsPerAcre ?? undefined,
+    reasonLongTerm: parsedB.reasonLongTerm ?? undefined,
+  };
+
+  const historyA = trimHistory([...state.historyA, snapshotA], MAX_HISTORY);
+  const historyB = trimHistory([...state.historyB, snapshotB], MAX_HISTORY);
+
+  settleCropNextTestBets(modelIdA, modelIdB, valueA, valueB);
+
+  const result: CropTestResultVs = {
+    modelAId: modelIdA,
+    modelBId: modelIdB,
+    prices,
+    historyA,
+    historyB,
+    startValueCents: CROP_BANKROLL_CENTS,
+    finalValueCentsA: valueA,
+    finalValueCentsB: valueB,
+  };
+
+  const newState: CropVsState = {
+    cashA,
+    bushelsA,
+    cashB,
+    bushelsB,
+    historyA,
+    historyB,
+  };
+
+  return { result, newState };
 }

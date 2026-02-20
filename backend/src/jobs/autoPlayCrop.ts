@@ -1,11 +1,12 @@
 /**
- * Auto-play: one crop VS test (two AIs, same price data) every CROP_AUTO_PLAY_DELAY_MS.
- * Runs runCropTestVs in the background and stores the last result for the frontend.
+ * Auto-play: one crop decision per agent every CROP_AUTO_PLAY_DELAY_MS (e.g. 5 min).
+ * Each run: fetch latest corn price, ask both agents once, apply trades, accumulate portfolio.
  */
 import { config } from "../config.js";
 import { getAIProviders } from "../ai/index.js";
-import { runCropTestVs } from "../domains/crop/service.js";
-import type { CropTestResultVs } from "../domains/crop/service.js";
+import { runCropSingleStepVs, type CropTestResultVs, type CropVsState } from "../domains/crop/service.js";
+
+let cropVsState: CropVsState | null = null;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,13 +72,24 @@ async function runCropLoop(): Promise<void> {
       cropAutoPlayState.lastError = null;
       cropAutoPlayState.nextRunAt = new Date(now + delayMs);
       try {
-        const result = await runCropTestVs(modelAId, modelBId);
+        const state: CropVsState =
+          cropVsState ??
+          ({
+            cashA: config.cropBankrollCents,
+            bushelsA: 0,
+            cashB: config.cropBankrollCents,
+            bushelsB: 0,
+            historyA: [],
+            historyB: [],
+          } satisfies CropVsState);
+        const { result, newState } = await runCropSingleStepVs(modelAId, modelBId, state);
+        cropVsState = newState;
         cropAutoPlayState.lastResult = result;
         cropAutoPlayState.lastRunAt = new Date();
         cropAutoPlayState.lastError = null;
         runCount++;
         if (runCount % 5 === 0) {
-          console.log(`Auto-play crop (${nameA} vs ${nameB}): ${runCount} runs completed`);
+          console.log(`Auto-play crop (${nameA} vs ${nameB}): ${runCount} decisions`);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -104,7 +116,7 @@ export function startAutoPlayCrop(): void {
   const nameA = providers[0].name;
   const nameB = providers[1].name;
   console.log(
-    `Auto-play crop: one VS test (${nameA} vs ${nameB}) every ${(delayMs / 1000 / 60).toFixed(1)} min. Place bets between runs.`
+    `Auto-play crop: one decision per agent (${nameA} vs ${nameB}) every ${(delayMs / 1000 / 60).toFixed(1)} min. Place bets between runs.`
   );
 
   runCropLoop();

@@ -1611,7 +1611,11 @@ export default function App() {
 
       {apiUnreachable && (
         <p style={{ padding: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, marginBottom: 24 }}>
-          Can’t reach the API. Start the backend in another terminal: <code style={{ background: "#450a0a", padding: "2px 6px" }}>npm run dev:backend</code>, then refresh.
+          Can’t reach the API. Start the backend: {API_BASE.startsWith("http://127.0.0.1") ? (
+            <><code style={{ background: "#450a0a", padding: "2px 6px" }}>npm run dev:backend</code>, then refresh.</>
+          ) : (
+            <>Can't reach the API at <code style={{ background: "#450a0a", padding: "2px 6px" }}>{API_BASE}</code>. Set VITE_API_URL in Vercel and redeploy. If backend was asleep, wait ~30s and try again.</>
+          )}
         </p>
       )}
 

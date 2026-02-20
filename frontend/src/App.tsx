@@ -150,12 +150,15 @@ type CropAutoPlayStatus = {
   currentPricePerBushel?: number;
   liveValueCentsA?: number;
   liveValueCentsB?: number;
-  /** Unrealized P/L (bushels * (currentPrice - avgCost)). When avgCost === currentPrice → P/L = 0 */
+  /** Total P/L = live value - start (includes realized + unrealized) */
   pnlCentsA?: number;
   pnlCentsB?: number;
   /** Average cost basis ¢/bu */
   avgCostCentsPerBushelA?: number;
   avgCostCentsPerBushelB?: number;
+  /** Trade breakdown for realized P/L */
+  tradeSummaryA?: { buyCount: number; sellCount: number; realizedPnlCents: number };
+  tradeSummaryB?: { buyCount: number; sellCount: number; realizedPnlCents: number };
 };
 
 function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalanceChange?: () => void }) {
@@ -336,22 +339,14 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
   const nameA = cropModels.find((m) => m.id === cropResultVs?.modelAId)?.name ?? cropResultVs?.modelAId ?? "A";
   const nameB = cropModels.find((m) => m.id === cropResultVs?.modelBId)?.name ?? cropResultVs?.modelBId ?? "B";
 
-  // P/L: use unrealized (bushels * (price - avgCost)) when we have cost basis; else value - startValue
-  const priceForPnl = currentPrice ?? historyA[historyA.length - 1]?.pricePerBushel ?? historyB[historyB.length - 1]?.pricePerBushel;
   const lastA = historyA[historyA.length - 1];
   const lastB = historyB[historyB.length - 1];
   const costBasisA = lastA?.costBasisCents;
   const costBasisB = lastB?.costBasisCents;
   const hasCostBasisA = lastA && lastA.bushels > 0 && typeof costBasisA === "number" && costBasisA > 0;
   const hasCostBasisB = lastB && lastB.bushels > 0 && typeof costBasisB === "number" && costBasisB > 0;
-  const pnlA = cropAutoPlayStatus?.pnlCentsA != null ? cropAutoPlayStatus.pnlCentsA
-    : hasCostBasisA && priceForPnl != null && priceForPnl > 0 && lastA && costBasisA != null
-      ? Math.round(lastA.bushels * (priceForPnl * 100 - costBasisA / lastA.bushels))
-      : (liveA ?? cropResultVs?.finalValueCentsA ?? 0) - (cropResultVs?.startValueCents ?? 0);
-  const pnlB = cropAutoPlayStatus?.pnlCentsB != null ? cropAutoPlayStatus.pnlCentsB
-    : hasCostBasisB && priceForPnl != null && priceForPnl > 0 && lastB && costBasisB != null
-      ? Math.round(lastB.bushels * (priceForPnl * 100 - costBasisB / lastB.bushels))
-      : (liveB ?? cropResultVs?.finalValueCentsB ?? 0) - (cropResultVs?.startValueCents ?? 0);
+  const pnlA = cropAutoPlayStatus?.pnlCentsA != null ? cropAutoPlayStatus.pnlCentsA : (liveA ?? cropResultVs?.finalValueCentsA ?? 0) - (cropResultVs?.startValueCents ?? 0);
+  const pnlB = cropAutoPlayStatus?.pnlCentsB != null ? cropAutoPlayStatus.pnlCentsB : (liveB ?? cropResultVs?.finalValueCentsB ?? 0) - (cropResultVs?.startValueCents ?? 0);
   const avgCostA = cropAutoPlayStatus?.avgCostCentsPerBushelA ?? (hasCostBasisA && lastA && costBasisA != null ? costBasisA / lastA.bushels : undefined);
   const avgCostB = cropAutoPlayStatus?.avgCostCentsPerBushelB ?? (hasCostBasisB && lastB && costBasisB != null ? costBasisB / lastB.bushels : undefined);
 
@@ -596,6 +591,14 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
                 avg cost {avgCostA != null ? `${avgCostA.toFixed(2)}¢/bu` : "—"}
               </div>
+              {cropAutoPlayStatus?.tradeSummaryA && (cropAutoPlayStatus.tradeSummaryA.buyCount > 0 || cropAutoPlayStatus.tradeSummaryA.sellCount > 0) && (
+                <div style={{ fontSize: "0.75rem", color: "#a1a1aa", marginTop: 2 }}>
+                  {cropAutoPlayStatus.tradeSummaryA.buyCount} buy{cropAutoPlayStatus.tradeSummaryA.buyCount !== 1 ? "s" : ""}
+                  {cropAutoPlayStatus.tradeSummaryA.sellCount > 0 && (
+                    <> · {cropAutoPlayStatus.tradeSummaryA.sellCount} sell{cropAutoPlayStatus.tradeSummaryA.sellCount !== 1 ? "s" : ""} (realized {(cropAutoPlayStatus.tradeSummaryA.realizedPnlCents >= 0 ? "+" : "")}${(cropAutoPlayStatus.tradeSummaryA.realizedPnlCents / 100).toFixed(2)})</>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameB} {liveB != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
@@ -609,6 +612,14 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
                 avg cost {avgCostB != null ? `${avgCostB.toFixed(2)}¢/bu` : "—"}
               </div>
+              {cropAutoPlayStatus?.tradeSummaryB && (cropAutoPlayStatus.tradeSummaryB.buyCount > 0 || cropAutoPlayStatus.tradeSummaryB.sellCount > 0) && (
+                <div style={{ fontSize: "0.75rem", color: "#a1a1aa", marginTop: 2 }}>
+                  {cropAutoPlayStatus.tradeSummaryB.buyCount} buy{cropAutoPlayStatus.tradeSummaryB.buyCount !== 1 ? "s" : ""}
+                  {cropAutoPlayStatus.tradeSummaryB.sellCount > 0 && (
+                    <> · {cropAutoPlayStatus.tradeSummaryB.sellCount} sell{cropAutoPlayStatus.tradeSummaryB.sellCount !== 1 ? "s" : ""} (realized {(cropAutoPlayStatus.tradeSummaryB.realizedPnlCents >= 0 ? "+" : "")}${(cropAutoPlayStatus.tradeSummaryB.realizedPnlCents / 100).toFixed(2)})</>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ marginLeft: "auto" }}>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>Start (each)</span>

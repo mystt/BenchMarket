@@ -53,33 +53,68 @@ export type AiResultPayload = HcsPayload;
 
 const MAX_MESSAGE_BYTES = 1024;
 
+/** Compact snapshot without long text fields (for HCS 1024-byte limit). */
+function compactCropSnapshot(snap: Record<string, unknown>): Record<string, unknown> {
+  return {
+    date: snap.date,
+    pricePerBushel: snap.pricePerBushel,
+    cashCents: snap.cashCents,
+    bushels: snap.bushels,
+    valueCents: snap.valueCents,
+    trade: snap.trade,
+    size: snap.size,
+    // omit reasoning, reasonLongTerm, longTermBushelsPerAcre to fit 1024 bytes
+  };
+}
+
+function buildMessage(payload: AiResultPayload): string {
+  const obj = { v: HCS_SCHEMA_VERSION, ts: new Date().toISOString(), ...payload };
+  const msg = JSON.stringify(obj);
+  if (new TextEncoder().encode(msg).length <= MAX_MESSAGE_BYTES) return msg;
+
+  // crop_decision: use compact snapshots (no reasoning) to fit
+  if (payload.domain === "crop_decision") {
+    const compact = {
+      v: HCS_SCHEMA_VERSION,
+      ts: new Date().toISOString(),
+      domain: "crop_decision",
+      modelAId: payload.modelAId,
+      modelBId: payload.modelBId,
+      snapshotA: compactCropSnapshot(payload.snapshotA as Record<string, unknown>),
+      snapshotB: compactCropSnapshot(payload.snapshotB as Record<string, unknown>),
+    };
+    const compactMsg = JSON.stringify(compact);
+    if (new TextEncoder().encode(compactMsg).length <= MAX_MESSAGE_BYTES) return compactMsg;
+    console.warn("[HCS] crop_decision still too large after compact, skipping");
+    return "";
+  }
+
+  console.warn("[HCS] Message too long, cannot compact:", payload.domain, "skipping");
+  return "";
+}
+
 /**
  * Submit an AI result message to the HCS topic. No-op if Hedera env is not configured.
  * Fire-and-forget: errors are logged and not thrown so game flow is not blocked.
+ * Crop decision snapshots are compacted (no reasoning text) to stay under 1024 bytes.
  */
 export async function submitAiResult(payload: AiResultPayload): Promise<void> {
   const c = getClient();
   if (!c) return;
   const topicId = config.hederaTopicId!;
   const client = c;
-  const message = JSON.stringify({ v: HCS_SCHEMA_VERSION, ts: new Date().toISOString(), ...payload });
-  const bytes = new TextEncoder().encode(message);
-  if (bytes.length > MAX_MESSAGE_BYTES) {
-    console.warn("[HCS] Message too long, truncating:", bytes.length);
-    const truncated = JSON.stringify({ ...payload, _truncated: true });
-    await submitRaw(truncated.slice(0, MAX_MESSAGE_BYTES - 50));
-  } else {
-    await submitRaw(message);
-  }
+  const message = buildMessage(payload);
+  if (!message) return;
 
-  async function submitRaw(msg: string): Promise<void> {
-    try {
-      const tx = new TopicMessageSubmitTransaction()
-        .setTopicId(TopicId.fromString(topicId))
-        .setMessage(msg);
-      await tx.execute(client);
-    } catch (e) {
-      console.warn("[HCS] Submit failed:", e);
+  try {
+    const tx = new TopicMessageSubmitTransaction()
+      .setTopicId(TopicId.fromString(topicId))
+      .setMessage(message);
+    await tx.execute(client);
+    if (payload.domain === "crop_decision") {
+      console.log("[HCS] Submitted crop_decision:", payload.modelAId, "vs", payload.modelBId);
     }
+  } catch (e) {
+    console.warn("[HCS] Submit failed:", e);
   }
 }

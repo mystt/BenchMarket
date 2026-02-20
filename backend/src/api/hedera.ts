@@ -1,11 +1,12 @@
 /**
  * API for Hedera HCS: sync/hydrate from mirror node.
  * GET /api/hedera/sync — re-fetch topic messages and rebuild in-memory state (blackjack, crop).
- * Lets the system pull in data from before for charts without restarting.
+ * GET /api/hedera/topic-stats — raw message counts by domain (debug).
  */
 
 import { Router } from "express";
 import { hydrateFromHedera } from "../hedera/hydrate.js";
+import { fetchTopicMessages } from "../hedera/mirror.js";
 import { config } from "../config.js";
 
 export const hederaRouter = Router();
@@ -21,6 +22,36 @@ hederaRouter.get("/sync", async (_req, res) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("GET /api/hedera/sync:", e);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/** GET /api/hedera/topic-stats — message counts by domain for debugging persistence. */
+hederaRouter.get("/topic-stats", async (_req, res) => {
+  if (!config.hederaTopicId) {
+    return res.status(400).json({ error: "HEDERA_TOPIC_ID not configured" });
+  }
+  try {
+    const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
+    const counts: Record<string, number> = {};
+    let parseErrors = 0;
+    for (const { message } of messages) {
+      try {
+        const parsed = JSON.parse(message) as Record<string, unknown>;
+        const domain = String(parsed.domain ?? "unknown");
+        counts[domain] = (counts[domain] ?? 0) + 1;
+      } catch {
+        parseErrors++;
+      }
+    }
+    res.json({
+      totalMessages: messages.length,
+      parseErrors,
+      byDomain: counts,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("GET /api/hedera/topic-stats:", e);
     res.status(500).json({ error: msg });
   }
 });

@@ -27,7 +27,7 @@ export type TopicMessagesResponse = {
     sequence_number?: number;
     message?: string;
   }>;
-  links?: { next?: string };
+  links?: { next?: string | { href?: string } };
 };
 
 /**
@@ -56,7 +56,7 @@ export async function fetchTopicMessages(options?: {
         console.warn("[HCS Mirror] Fetch failed:", res.status, res.statusText);
         break;
       }
-      const data = (await res.json()) as TopicMessagesResponse & { links?: { next?: string | null } };
+      const data = (await res.json()) as TopicMessagesResponse;
       const raw = data.messages ?? [];
       for (const m of raw) {
         const msg = m.message;
@@ -73,7 +73,18 @@ export async function fetchTopicMessages(options?: {
         }
       }
       const next = data.links?.next;
-      nextUrl = typeof next === "string" && next ? (next.startsWith("http") ? next : base + next) : null;
+      const nextHref =
+        typeof next === "string"
+          ? next
+          : next && typeof next === "object" && "href" in next
+            ? (next as { href?: string }).href
+            : null;
+      nextUrl =
+        nextHref && nextHref.length > 0
+          ? nextHref.startsWith("http")
+            ? nextHref
+            : base + nextHref
+          : null;
     }
     return out;
   } catch (e) {

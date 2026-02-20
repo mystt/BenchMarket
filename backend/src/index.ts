@@ -19,7 +19,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) =>
+  res.json({ ok: true, openaiConfigured: !!config.openaiApiKey })
+);
 
 app.use("/api/blackjack", blackjackRouter);
 app.use("/api/market", marketRouter);

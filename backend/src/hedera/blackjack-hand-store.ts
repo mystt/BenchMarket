@@ -37,18 +37,26 @@ export function appendBlackjackHand(modelId: string, entry: Omit<BlackjackHandEn
   });
 }
 
-/** Replace store with data from HCS hydrate (like setCropVsStateFromHydration). */
+/** Replace store with data from HCS. In-memory hands (from appendBlackjackHand) take precedence when they have more complete data. */
 export function loadBlackjackHandHistoryFromHcs(entriesByModel: Map<string, BlackjackHandEntry[]>): void {
-  handsByModel.clear();
+  for (const [modelId, hcsEntries] of entriesByModel) {
+    const existing = handsByModel.get(modelId) ?? [];
+    const existingWithCards = existing.filter((h) => (h.playerCards?.length ?? 0) > 0);
+    if (existingWithCards.length > 0 && existing.length >= hcsEntries.length) continue;
+    if (existing.length > hcsEntries.length) {
+      const list = existing.map((e, i) => ({ ...e, handIndex: i + 1, totalHands: existing.length }));
+      list.forEach((h) => { h.totalHands = list.length; });
+      handsByModel.set(modelId, list);
+      continue;
+    }
+    const list = hcsEntries.map((e, i) => ({ ...e, handIndex: i + 1, totalHands: hcsEntries.length }));
+    list.forEach((h) => { h.totalHands = list.length; });
+    handsByModel.set(modelId, list);
+  }
   for (const [modelId, entries] of entriesByModel) {
-    const list = entries.map((e, i) => ({
-      ...e,
-      handIndex: i + 1,
-      totalHands: entries.length,
-    }));
-    list.forEach((h) => {
-      h.totalHands = list.length;
-    });
+    if (handsByModel.has(modelId)) continue;
+    const list = entries.map((e, i) => ({ ...e, handIndex: i + 1, totalHands: entries.length }));
+    list.forEach((h) => { h.totalHands = list.length; });
     handsByModel.set(modelId, list);
   }
 }

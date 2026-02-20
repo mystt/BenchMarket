@@ -68,34 +68,13 @@ function compactCropSnapshot(snap: Record<string, unknown>): Record<string, unkn
 }
 
 function buildMessage(payload: AiResultPayload): string {
-  const obj = { v: HCS_SCHEMA_VERSION, ts: new Date().toISOString(), ...payload };
-  const msg = JSON.stringify(obj);
-  if (new TextEncoder().encode(msg).length <= MAX_MESSAGE_BYTES) return msg;
-
-  // crop_decision: use compact snapshots (no reasoning) to fit
-  if (payload.domain === "crop_decision") {
-    const compact = {
-      v: HCS_SCHEMA_VERSION,
-      ts: new Date().toISOString(),
-      domain: "crop_decision",
-      modelAId: payload.modelAId,
-      modelBId: payload.modelBId,
-      snapshotA: compactCropSnapshot(payload.snapshotA as Record<string, unknown>),
-      snapshotB: compactCropSnapshot(payload.snapshotB as Record<string, unknown>),
-    };
-    const compactMsg = JSON.stringify(compact);
-    if (new TextEncoder().encode(compactMsg).length <= MAX_MESSAGE_BYTES) return compactMsg;
-    console.warn("[HCS] crop_decision still too large after compact, skipping");
-    return "";
-  }
-
-  // blackjack_vs: drop optional fields (decisions, dealerCards) to fit; keep cards for history display
+  // blackjack_vs: always use compact format to guarantee we include playerACards, playerBCards, dealerUpcard, bets (fit 1024 bytes)
   if (payload.domain === "blackjack_vs") {
     const vs = payload as {
-      handIdA?: string; handIdB?: string; modelIdA?: string; modelIdB?: string; date?: string;
+      modelIdA?: string; modelIdB?: string; date?: string;
       outcomeA?: string; outcomeB?: string; pnlA?: number; pnlB?: number;
       playerACards?: string[]; playerBCards?: string[]; dealerUpcard?: string;
-      dealerCards?: string[]; dealerTotal?: number; betA?: number; betB?: number;
+      dealerTotal?: number; betA?: number; betB?: number;
     };
     const compact = {
       v: HCS_SCHEMA_VERSION,
@@ -117,7 +96,28 @@ function buildMessage(payload: AiResultPayload): string {
     };
     const compactMsg = JSON.stringify(compact);
     if (new TextEncoder().encode(compactMsg).length <= MAX_MESSAGE_BYTES) return compactMsg;
-    console.warn("[HCS] blackjack_vs still too large after compact, skipping");
+    console.warn("[HCS] blackjack_vs compact too large, skipping");
+    return "";
+  }
+
+  const obj = { v: HCS_SCHEMA_VERSION, ts: new Date().toISOString(), ...payload };
+  const msg = JSON.stringify(obj);
+  if (new TextEncoder().encode(msg).length <= MAX_MESSAGE_BYTES) return msg;
+
+  // crop_decision: use compact snapshots (no reasoning) to fit
+  if (payload.domain === "crop_decision") {
+    const compact = {
+      v: HCS_SCHEMA_VERSION,
+      ts: new Date().toISOString(),
+      domain: "crop_decision",
+      modelAId: payload.modelAId,
+      modelBId: payload.modelBId,
+      snapshotA: compactCropSnapshot(payload.snapshotA as Record<string, unknown>),
+      snapshotB: compactCropSnapshot(payload.snapshotB as Record<string, unknown>),
+    };
+    const compactMsg = JSON.stringify(compact);
+    if (new TextEncoder().encode(compactMsg).length <= MAX_MESSAGE_BYTES) return compactMsg;
+    console.warn("[HCS] crop_decision still too large after compact, skipping");
     return "";
   }
 

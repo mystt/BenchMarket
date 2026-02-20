@@ -1,6 +1,6 @@
 /**
- * Blackjack hand history — mirrors the crop pattern.
- * Serves from in-memory store (updated in real-time when hands play, loaded from HCS on hydrate).
+ * Blackjack hand history — serves from in-memory store, falls back to HCS when empty.
+ * Newer HCS messages include playerCards, dealerUpcard, bets; older messages may lack them (show what we can).
  */
 
 import { fetchTopicMessages } from "./mirror.js";
@@ -21,7 +21,7 @@ function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
   return undefined;
 }
 
-/** Fetch blackjack hands. Serves from in-memory store (like crop lastResult); falls back to HCS when empty. */
+/** Fetch blackjack hands. Serves from in-memory store first; falls back to HCS when empty. Older HCS messages may lack cards/bets — we show what we have. */
 export async function fetchBlackjackHandHistory(
   modelId: string,
   date: string
@@ -37,7 +37,7 @@ export async function fetchBlackjackHandHistory(
   return getBlackjackHands(modelId, dateFilter);
 }
 
-/** Parse messages into hands by model. Pass preFetched to use existing messages (avoids double fetch in hydrate). */
+/** Parse HCS messages into hands by model. Newer messages have playerCards, dealerUpcard, bets; older ones have outcome/pnl only. */
 export async function parseAllMessagesToHandsByModel(
   dateFilter: string | null,
   preFetched?: { consensus_timestamp: string; sequence_number: number; message: string }[]

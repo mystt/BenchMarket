@@ -1,7 +1,35 @@
 import { Router } from "express";
+import { config } from "../config.js";
 import { fetchCornPrices, fetchLatestCornPrice } from "../sources/corn.js";
 import { runCropTest, runCropTestVs } from "../domains/crop/service.js";
 import { getCropAutoPlayStatus } from "../jobs/autoPlayCrop.js";
+
+/** Recompute cost basis from trade history when HCS/stored value is 0. */
+function recomputeCostBasisFromHistory(history: { pricePerBushel: number; trade?: string; size?: number }[]): number {
+  let costBasis = 0;
+  let bushels = 0;
+  let cash = config.cropBankrollCents;
+  for (const s of history) {
+    const priceCents = Math.round(s.pricePerBushel * 100);
+    if (s.trade === "buy" && (s.size ?? 0) > 0) {
+      const spendCents = Math.min(cash, Math.round((s.size as number) * 100));
+      const buyBushels = priceCents > 0 ? Math.floor(spendCents / priceCents) : 0;
+      if (buyBushels > 0) {
+        costBasis += buyBushels * s.pricePerBushel * 100;
+        cash -= buyBushels * priceCents;
+        bushels += buyBushels;
+      }
+    } else if (s.trade === "sell" && (s.size ?? 0) > 0) {
+      const sellBushels = Math.min(bushels, Math.floor(s.size as number));
+      if (bushels > 0 && sellBushels > 0) {
+        costBasis = (costBasis * (bushels - sellBushels)) / bushels;
+        cash += sellBushels * priceCents;
+        bushels -= sellBushels;
+      }
+    }
+  }
+  return costBasis;
+}
 import {
   placeCropNextTestBet,
   listCropNextTestBets,
@@ -38,14 +66,24 @@ cropRouter.get("/auto-play-status", async (_req, res) => {
       status.liveValueCentsA = lastA ? Math.round(lastA.cashCents + lastA.bushels * priceCentsExact) : r.finalValueCentsA;
       status.liveValueCentsB = lastB ? Math.round(lastB.cashCents + lastB.bushels * priceCentsExact) : r.finalValueCentsB;
 
-      // Avg cost & unrealized P/L: P/L = bushels * (currentPrice - avgCost). When avgCost === price → P/L = 0 (use exact price, not rounded)
-      if (lastA && lastA.bushels > 0 && typeof lastA.costBasisCents === "number" && lastA.costBasisCents > 0) {
-        status.avgCostCentsPerBushelA = lastA.costBasisCents / lastA.bushels;
-        status.pnlCentsA = Math.round(lastA.bushels * (priceCentsExact - status.avgCostCentsPerBushelA));
+      // Avg cost & unrealized P/L: use stored cost basis or recompute from history when HCS had 0
+      if (lastA && lastA.bushels > 0) {
+        let costBasisA = typeof lastA.costBasisCents === "number" && lastA.costBasisCents > 0
+          ? lastA.costBasisCents
+          : recomputeCostBasisFromHistory(r.historyA);
+        if (costBasisA > 0) {
+          status.avgCostCentsPerBushelA = costBasisA / lastA.bushels;
+          status.pnlCentsA = Math.round(lastA.bushels * (priceCentsExact - status.avgCostCentsPerBushelA));
+        }
       }
-      if (lastB && lastB.bushels > 0 && typeof lastB.costBasisCents === "number" && lastB.costBasisCents > 0) {
-        status.avgCostCentsPerBushelB = lastB.costBasisCents / lastB.bushels;
-        status.pnlCentsB = Math.round(lastB.bushels * (priceCentsExact - status.avgCostCentsPerBushelB));
+      if (lastB && lastB.bushels > 0) {
+        let costBasisB = typeof lastB.costBasisCents === "number" && lastB.costBasisCents > 0
+          ? lastB.costBasisCents
+          : recomputeCostBasisFromHistory(r.historyB);
+        if (costBasisB > 0) {
+          status.avgCostCentsPerBushelB = costBasisB / lastB.bushels;
+          status.pnlCentsB = Math.round(lastB.bushels * (priceCentsExact - status.avgCostCentsPerBushelB));
+        }
       }
     }
   }

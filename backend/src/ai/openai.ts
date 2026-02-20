@@ -2,10 +2,15 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import type { AIProvider, AIResponse } from "./types.js";
 
-const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "";
+const apiKey = (config.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "").trim();
 
 if (!apiKey) {
-  console.warn("OPENAI_API_KEY not set; OpenAI provider will not be available.");
+  console.warn(
+    "[OpenAI] OPENAI_API_KEY not set. Check Render Environment: key must be exactly 'OPENAI_API_KEY'. " +
+      "Config has key: " + !!config.openaiApiKey + ", process.env has key: " + !!process.env.OPENAI_API_KEY
+  );
+} else {
+  console.log("[OpenAI] API key loaded successfully (length=" + apiKey.length + ")");
 }
 
 let client: OpenAI | null = null;

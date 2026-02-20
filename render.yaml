@@ -19,6 +19,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Add these in Render Dashboard → Environment (sensitive values):
-      # OPENAI_API_KEY = your OpenAI API key (required for AI)
-      # Optional: DATABASE_URL, HEDERA_*, AUTO_PLAY_DELAY_MS, etc.
+      # Set OPENAI_API_KEY in Dashboard → Environment → Add Variable, then "Save and deploy"
+      - key: OPENAI_API_KEY
+        sync: false

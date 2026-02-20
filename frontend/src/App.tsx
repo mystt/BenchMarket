@@ -592,10 +592,12 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
                 P/L {pnlA >= 0 ? "+" : ""}
                 ${(pnlA / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                {avgCostA != null && (
-                  <span style={{ marginLeft: 8 }}>avg {avgCostA.toFixed(2)}¢/bu</span>
-                )}
               </div>
+              {avgCostA != null && (
+                <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
+                  avg cost {avgCostA.toFixed(2)}¢/bu
+                </div>
+              )}
             </div>
             <div>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>{nameB} {liveB != null ? "value" : "end"}{currentPrice != null ? ` (at ${(currentPrice * 100).toFixed(2)}¢/bu)` : ""}</span>
@@ -605,10 +607,12 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
               <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
                 P/L {pnlB >= 0 ? "+" : ""}
                 ${(pnlB / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                {avgCostB != null && (
-                  <span style={{ marginLeft: 8 }}>avg {avgCostB.toFixed(2)}¢/bu</span>
-                )}
               </div>
+              {avgCostB != null && (
+                <div style={{ fontSize: "0.8rem", color: "#71717a" }}>
+                  avg cost {avgCostB.toFixed(2)}¢/bu
+                </div>
+              )}
             </div>
             <div style={{ marginLeft: "auto" }}>
               <span style={{ color: "#71717a", fontSize: "0.85rem" }}>Start (each)</span>

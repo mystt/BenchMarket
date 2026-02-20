@@ -231,7 +231,7 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       if (priceCentsPerBushel > 0 && spendCents > 0) {
         const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
         cashA -= buyBushels * priceCentsPerBushel;
-        costBasisA += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
+        costBasisA += buyBushels * pricePerBushel * 100; // exact price for accurate weighted avg (no per-purchase rounding)
         bushelsA += buyBushels;
       }
     } else if (parsedA.trade === "sell" && parsedA.size > 0) {
@@ -245,7 +245,7 @@ export async function runCropTestVs(modelIdA: string, modelIdB: string): Promise
       if (priceCentsPerBushel > 0 && spendCents > 0) {
         const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
         cashB -= buyBushels * priceCentsPerBushel;
-        costBasisB += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
+        costBasisB += buyBushels * pricePerBushel * 100; // exact price for accurate weighted avg (no per-purchase rounding)
         bushelsB += buyBushels;
       }
     } else if (parsedB.trade === "sell" && parsedB.size > 0) {
@@ -370,7 +370,7 @@ export async function runCropSingleStepVs(
     if (priceCentsPerBushel > 0 && spendCents > 0) {
       const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
       cashA -= buyBushels * priceCentsPerBushel;
-      costBasisA += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
+      costBasisA += buyBushels * pricePerBushel * 100; // exact price for accurate weighted avg (no per-purchase rounding)
       bushelsA += buyBushels;
     }
   } else if (parsedA.trade === "sell" && parsedA.size > 0) {
@@ -384,7 +384,7 @@ export async function runCropSingleStepVs(
     if (priceCentsPerBushel > 0 && spendCents > 0) {
       const buyBushels = Math.floor(spendCents / priceCentsPerBushel);
       cashB -= buyBushels * priceCentsPerBushel;
-      costBasisB += Math.round(buyBushels * pricePerBushel * 100); // exact price for accurate avg cost
+      costBasisB += buyBushels * pricePerBushel * 100; // exact price for accurate weighted avg (no per-purchase rounding)
       bushelsB += buyBushels;
     }
   } else if (parsedB.trade === "sell" && parsedB.size > 0) {

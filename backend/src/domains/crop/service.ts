@@ -1,6 +1,6 @@
 import { getAIProvider } from "../../ai/index.js";
 import { config } from "../../config.js";
-import { fetchCornPrices, type CornPricePoint } from "../../data/corn.js";
+import { fetchCornPrices, type CornPricePoint } from "../../sources/corn.js";
 import { settleCropNextTestBets } from "./market.js";
 
 const CROP_BANKROLL_CENTS = config.cropBankrollCents;

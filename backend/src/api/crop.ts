@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { fetchCornPrices } from "../data/corn.js";
+import { fetchCornPrices } from "../sources/corn.js";
 import { runCropTest, runCropTestVs } from "../domains/crop/service.js";
 import {
   placeCropNextTestBet,

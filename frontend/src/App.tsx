@@ -2081,11 +2081,12 @@ export default function App() {
           Choose two different models above (Model A and Model B must differ).
         </p>
       )}
-      {(streamingVs || vsState.totalHands > 0) && (
+      {models.length >= 2 && (
         <div style={{ marginBottom: 24, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, alignItems: "start", maxWidth: 1000 }}>
           <div style={{ padding: 16, background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)", borderRadius: 12, border: "1px solid #334155" }}>
             <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: 8 }}>{models.find((m) => m.id === modelA)?.name ?? "A"}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              {vsState.playerACards.length === 0 && <span style={{ color: "#64748b" }}>{streamingVs ? "Waiting for deal…" : "—"}</span>}
               {vsState.playerACards.map((c, i) => (
                 <span key={i} style={{ padding: "8px 10px", background: "#f8fafc", color: "#0f172a", borderRadius: 6, fontWeight: 700 }}>{formatCard(c)}</span>
               ))}
@@ -2098,16 +2099,18 @@ export default function App() {
           <div style={{ padding: 16, background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)", borderRadius: 12, border: "1px solid #334155", textAlign: "center" }}>
             <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: 8 }}>Dealer</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+              {vsState.dealerCards.length === 0 && <span style={{ color: "#64748b" }}>—</span>}
               {vsState.dealerCards.map((c, i) => (
                 <span key={i} style={{ padding: "8px 10px", background: c ? "#f8fafc" : "#475569", color: c ? "#0f172a" : "#94a3b8", borderRadius: 6, fontWeight: 700 }}>{c ? formatCard(c) : "?"}</span>
               ))}
               {vsState.dealerTotal != null && <span style={{ color: "#e2e8f0" }}>→ {vsState.dealerTotal}</span>}
             </div>
-            <div style={{ marginTop: 8, fontSize: "0.9rem", color: "#d6d3d1" }}>Hand {vsState.handIndex} of {vsState.totalHands}</div>
+            <div style={{ marginTop: 8, fontSize: "0.9rem", color: "#d6d3d1" }}>{vsState.totalHands ? `Hand ${vsState.handIndex} of ${vsState.totalHands}` : "—"}</div>
           </div>
           <div style={{ padding: 16, background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)", borderRadius: 12, border: "1px solid #334155" }}>
             <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: 8 }}>{models.find((m) => m.id === modelB)?.name ?? "B"}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              {vsState.playerBCards.length === 0 && <span style={{ color: "#64748b" }}>{streamingVs ? "Waiting for deal…" : "—"}</span>}
               {vsState.playerBCards.map((c, i) => (
                 <span key={i} style={{ padding: "8px 10px", background: "#f8fafc", color: "#0f172a", borderRadius: 6, fontWeight: 700 }}>{formatCard(c)}</span>
               ))}
@@ -2119,7 +2122,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {(streamingVs || vsState.totalHands > 0) && (
+      {models.length >= 2 && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 1000, marginBottom: 24, minHeight: 320 }}>
           {/* Model A: scrollable reasoning — one block per hand with bet + play reasoning */}
           <div style={{ display: "flex", flexDirection: "column", background: "#1c1917", borderRadius: 10, border: "1px solid #44403c", minHeight: 320, maxHeight: 520, overflow: "hidden" }}>

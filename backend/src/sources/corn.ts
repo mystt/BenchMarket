@@ -1,5 +1,6 @@
 /**
  * US corn futures price data from Yahoo Finance (ZC=F). No fake data — errors if fetch fails.
+ * CME corn is quoted in cents per bushel; we convert to dollars for display and calculations.
  */
 
 import YahooFinance from "yahoo-finance2";
@@ -27,7 +28,7 @@ export async function fetchCornPrices(): Promise<CornPricePoint[]> {
     .filter((row: { date?: Date; close?: number }) => row?.date && typeof row?.close === "number")
     .map((row: { date: Date; close: number }) => ({
       date: row.date.toISOString().slice(0, 10),
-      pricePerBushel: row.close,
+      pricePerBushel: row.close / 100, // CME corn close is in cents/bu; convert to $/bu
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (points.length < MIN_POINTS) {

@@ -136,11 +136,22 @@ type CropTestResultVs = {
 type CropNextTestBet = { id: string; model_a_id: string; model_b_id: string; direction: string; amount_cents: number; outcome: string; payout_cents: number | null };
 type CropLongTermBet = { id: string; model_id: string; period: string; prediction_bu_per_acre: number | null; direction: string; amount_cents: number; outcome: string; payout_cents: number | null };
 
+type CropAutoPlayStatus = {
+  enabled: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  intervalMs: number;
+  modelAId: string | null;
+  modelBId: string | null;
+  lastResult: CropTestResultVs | null;
+};
+
 function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalanceChange?: () => void }) {
   const [cropModels, setCropModels] = useState<AIModel[]>([]);
   const [cropModelA, setCropModelA] = useState("");
   const [cropModelB, setCropModelB] = useState("");
-  const [cropRunning, setCropRunning] = useState(false);
+  const [cropAutoPlayStatus, setCropAutoPlayStatus] = useState<CropAutoPlayStatus | null>(null);
+  const [cropNow, setCropNow] = useState(Date.now());
   const [cropResultVs, setCropResultVs] = useState<CropTestResultVs | null>(null);
   const [cropError, setCropError] = useState("");
   const [cropNextTestBets, setCropNextTestBets] = useState<CropNextTestBet[]>([]);
@@ -187,6 +198,40 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
   }, [cropResultVs, fetchCropBets]);
 
   useEffect(() => {
+    const poll = () => {
+      fetch(`${API}/crop/auto-play-status`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) {
+            setCropAutoPlayStatus(d);
+            if (d.lastResult) setCropResultVs(d.lastResult);
+          }
+        })
+        .catch(() => setCropAutoPlayStatus(null));
+    };
+    poll();
+    const t = setInterval(poll, 15000);
+    return () => clearInterval(t);
+  }, [API]);
+
+  useEffect(() => {
+    if (!cropAutoPlayStatus?.enabled || !cropAutoPlayStatus?.nextRunAt) return;
+    const tick = setInterval(() => setCropNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [cropAutoPlayStatus?.enabled, cropAutoPlayStatus?.nextRunAt]);
+
+  useEffect(() => {
+    if (!cropAutoPlayStatus?.enabled) return;
+    const run = () => {
+      fetchCropBets();
+      onBalanceChange?.();
+    };
+    run();
+    const t = setInterval(run, 20000);
+    return () => clearInterval(t);
+  }, [cropAutoPlayStatus?.enabled, fetchCropBets, onBalanceChange]);
+
+  useEffect(() => {
     if (!cropModelA || !cropModelB || cropModelA === cropModelB) {
       setCropNextTestOddsHistory([]);
       return;
@@ -207,26 +252,6 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
       .then((d) => setCropLongTermOddsHistory(d?.series ?? []))
       .catch(() => setCropLongTermOddsHistory([]));
   }, [API, cropLongTermModel, cropLongTermPeriod, cropLongTermBets]);
-
-  const runTest = () => {
-    if (!cropModelA || !cropModelB || cropModelA === cropModelB) return;
-    setCropError("");
-    setCropRunning(true);
-    setCropResultVs(null);
-    fetch(`${API}/crop/run-test-vs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modelIdA: cropModelA, modelIdB: cropModelB }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) throw new Error(d.error);
-        setCropResultVs(d as CropTestResultVs);
-        onBalanceChange?.();
-      })
-      .catch((e) => setCropError(e.message || "Test failed"))
-      .finally(() => setCropRunning(false));
-  };
 
   const placeCropNextTestBet = () => {
     const amountCents = Math.round(parseFloat(cropNextTestAmount || "0") * 100);
@@ -384,8 +409,39 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
     <div style={{ maxWidth: 640, padding: "24px 0" }}>
       <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Crop prediction AI benchmark</h2>
       <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
-        US corn futures. Two AIs each get $100k fake capital and make buy/sell decisions over ~30s on the same real price data. We track portfolio value and long-term yield predictions (bushels per acre).
+        US corn futures. Two AIs each get $100k fake capital and make buy/sell decisions over ~30s on the same real price data. Auto-play runs one VS test every 5 min.
       </p>
+
+      {cropAutoPlayStatus?.enabled && (
+        <div style={{ marginBottom: 20, padding: 16, background: "#0f172a", borderRadius: 10, border: "1px solid #334155" }}>
+          <div style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: 6 }}>Auto-play (2 VS AIs)</div>
+          <div style={{ fontSize: "1rem", color: "#e2e8f0", fontWeight: 600 }}>
+            {cropAutoPlayStatus.modelAId && cropAutoPlayStatus.modelBId
+              ? `${cropModels.find((m) => m.id === cropAutoPlayStatus.modelAId)?.name ?? cropAutoPlayStatus.modelAId} vs ${cropModels.find((m) => m.id === cropAutoPlayStatus.modelBId)?.name ?? cropAutoPlayStatus.modelBId}`
+              : "— vs —"}
+          </div>
+          <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#fde047" }}>
+            {cropAutoPlayStatus.nextRunAt
+              ? (() => {
+                  const rem = Math.max(0, new Date(cropAutoPlayStatus.nextRunAt).getTime() - cropNow);
+                  const m = Math.floor(rem / 60000);
+                  const s = Math.floor((rem % 60000) / 1000);
+                  return `Next crop run in ${m}:${s.toString().padStart(2, "0")}`;
+                })()
+              : "Next run: soon…"}
+          </div>
+          {cropAutoPlayStatus.lastRunAt && (
+            <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#94a3b8" }}>
+              Last run: {(() => {
+                const sec = Math.floor((cropNow - new Date(cropAutoPlayStatus.lastRunAt).getTime()) / 1000);
+                if (sec < 60) return `${sec}s ago`;
+                const min = Math.floor(sec / 60);
+                return `${min} min ago`;
+              })()}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16 }}>
         <div>
@@ -393,7 +449,6 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
           <select
             value={cropModelA}
             onChange={(e) => setCropModelA(e.target.value)}
-            disabled={cropRunning}
             style={{
               minWidth: 160,
               padding: "10px 12px",
@@ -413,7 +468,6 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
           <select
             value={cropModelB}
             onChange={(e) => setCropModelB(e.target.value)}
-            disabled={cropRunning}
             style={{
               minWidth: 160,
               padding: "10px 12px",
@@ -429,24 +483,6 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
           </select>
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={runTest}
-        disabled={cropRunning || !cropModelA || !cropModelB || cropModelA === cropModelB}
-        style={{
-          padding: "12px 24px",
-          background: cropRunning ? "#3f3f46" : "#3b82f6",
-          border: "none",
-          borderRadius: 8,
-          color: "#fff",
-          fontWeight: 600,
-          cursor: cropRunning ? "not-allowed" : "pointer",
-          marginBottom: 16,
-        }}
-      >
-        {cropRunning ? "Running test (~30s)…" : "Run test (~30s)"}
-      </button>
 
       {cropError && (
         <p style={{ color: "#ef4444", marginBottom: 16 }}>{cropError}</p>

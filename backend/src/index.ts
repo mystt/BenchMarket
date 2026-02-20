@@ -11,6 +11,7 @@ import { marketRouter } from "./api/market.js";
 import { cropRouter } from "./api/crop.js";
 import { userRouter } from "./api/user.js";
 import { startAutoPlayBlackjack } from "./jobs/autoPlayBlackjack.js";
+import { startAutoPlayCrop } from "./jobs/autoPlayCrop.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === "production";
@@ -51,6 +52,7 @@ const server = app.listen(config.port, "0.0.0.0", () => {
     console.log(`HCS: AI results will be submitted to topic ${config.hederaTopicId}`);
   }
   startAutoPlayBlackjack();
+  startAutoPlayCrop();
 });
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {

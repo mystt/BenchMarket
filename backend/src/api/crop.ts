@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchCornPrices } from "../sources/corn.js";
 import { runCropTest, runCropTestVs } from "../domains/crop/service.js";
+import { getCropAutoPlayStatus } from "../jobs/autoPlayCrop.js";
 import {
   placeCropNextTestBet,
   listCropNextTestBets,
@@ -21,6 +22,11 @@ const CROP_MODELS = [
 
 cropRouter.get("/models", (_req, res) => {
   res.json({ models: CROP_MODELS });
+});
+
+/** GET /api/crop/auto-play-status — next run time, last result, models. */
+cropRouter.get("/auto-play-status", (_req, res) => {
+  res.json(getCropAutoPlayStatus());
 });
 
 /** GET /api/crop/corn-prices — last ~30 days of US corn futures (for charts or display). */

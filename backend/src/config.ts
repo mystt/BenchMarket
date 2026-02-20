@@ -17,6 +17,8 @@ const env = z.object({
   CROP_BANKROLL_CENTS: z.coerce.number().default(10_000_000), // 100k
   /** Delay in ms between each auto-play hand (0 = off). e.g. 300000 = 5 min so users can bet and we save credits */
   AUTO_PLAY_DELAY_MS: z.coerce.number().default(300000),
+  /** Delay in ms between each crop auto-play run (0 = off). e.g. 300000 = 5 min */
+  CROP_AUTO_PLAY_DELAY_MS: z.coerce.number().default(300000),
   /** Bet size per auto-play hand when AI doesn't decide (cents). e.g. 1000 = $10 */
   AUTO_PLAY_BET_CENTS: z.coerce.number().default(1000),
   /** Hedera HCS: operator account id (e.g. 0.0.1234). If set with key/topic, AI results are submitted to the topic. */
@@ -46,6 +48,7 @@ export const config = {
   cropBankrollCents: env.CROP_BANKROLL_CENTS,
   autoPlayDelayMs: env.AUTO_PLAY_DELAY_MS,
   autoPlayBetCents: env.AUTO_PLAY_BET_CENTS,
+  cropAutoPlayDelayMs: env.CROP_AUTO_PLAY_DELAY_MS,
   /** Hedera HCS: when all set, submit AI results to HEDERA_TOPIC_ID */
   hederaOperatorId: env.HEDERA_OPERATOR_ID,
   hederaOperatorKey: env.HEDERA_OPERATOR_KEY,

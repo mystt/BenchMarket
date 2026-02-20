@@ -48,36 +48,44 @@ You can add both `yourdomain.com` and `www.yourdomain.com`; Vercel will suggest 
 
 ---
 
-## 4. Deploy backend (Railway or Render)
+## 4. Deploy backend (Render)
 
-The backend must run somewhere so the frontend can call it. Example: **Railway**.
+The backend must run somewhere so the frontend can call it. **Render** is used here.
 
-1. Go to [railway.app](https://railway.app) and sign in with GitHub.
-2. **New Project** → **Deploy from GitHub repo** → select the same repo.
-3. **Settings** for the new service:
+### Option A: Blueprint (recommended)
+
+1. Go to [render.com](https://render.com) and sign in with GitHub.
+2. **New** → **Blueprint** → connect your GitHub repo (same repo as frontend).
+3. Render will detect `render.yaml` and create the `benchmarket-api` service.
+4. **Environment** (Dashboard → your service → Environment): add:
+   - `OPENAI_API_KEY` = your OpenAI API key (required for AI)
+   - Optional: `DATABASE_URL`, `HEDERA_OPERATOR_ID`, `HEDERA_OPERATOR_KEY`, `HEDERA_TOPIC_ID`, etc.
+5. Deploy. Render will give you a URL like `https://benchmarket-api.onrender.com`.
+
+### Option B: Manual Web Service
+
+1. **New** → **Web Service** → connect your repo.
+2. **Settings:**
    - **Root Directory:** `backend`
-   - **Build Command:** `npm run build`
-   - **Start Command:** `npm run start` (or `node dist/index.js`)
-   - **Watch Paths:** `backend/**` (so only backend changes trigger redeploys)
-4. **Variables** (Railway **Variables** tab): add the same env vars you use locally, especially:
-   - `OPENAI_API_KEY` (required for AI)
-   - `PORT` – leave unset so Railway sets it (often 3000 or from `PORT`).
-   - Optional: `HEDERA_OPERATOR_ID`, `HEDERA_OPERATOR_KEY`, `HEDERA_TOPIC_ID`, etc.
-5. Deploy. Railway will give you a URL like `https://your-service.railway.app`.
-6. **CORS:** The backend already uses `cors()` with no origin restriction, so the Vercel domain can call it. If you lock CORS later, allow your Vercel/domain origin.
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm start`
+   - **Health Check Path:** `/health`
+3. **Environment:** add `OPENAI_API_KEY` and any other vars (see Option A).
 
-**Set the frontend env:**
+### Wire up the frontend
 
-- In Vercel, set **Environment Variable**  
-  `VITE_API_URL` = `https://your-service.railway.app`  
-  (no trailing slash, no `/api`).
-- Redeploy the frontend so the new value is baked into the build.
+- In **Vercel** → your project → **Settings** → **Environment Variables** → add:
+  - `VITE_API_URL` = `https://benchmarket-api.onrender.com`  
+    (or your Render URL; no trailing slash, no `/api`).
+- **Redeploy** the frontend so the new value is baked into the build.
+
+**CORS:** The backend uses `cors()` with no origin restriction, so the Vercel domain can call it.
 
 ---
 
 ## 5. Optional: backend on your domain (e.g. api.yourdomain.com)
 
-- **Railway:** In the service, open **Settings** → **Networking** → **Custom Domain** and add `api.yourdomain.com`. Point a CNAME at the host Railway shows.
+- **Render:** In the service, open **Settings** → **Custom Domains** and add `api.yourdomain.com`. Point a CNAME at the host Render shows.
 - Then set `VITE_API_URL=https://api.yourdomain.com` in Vercel and redeploy.
 
 ---
@@ -87,7 +95,7 @@ The backend must run somewhere so the frontend can call it. Example: **Railway**
 - [ ] Repo on GitHub
 - [ ] Vercel project: Root = `frontend`, env `VITE_API_URL` = backend URL
 - [ ] Custom domain added in Vercel and DNS set at registrar
-- [ ] Backend on Railway (or Render): Root = `backend`, `OPENAI_API_KEY` and any other env set
+- [ ] Backend on Render: Root = `backend`, `OPENAI_API_KEY` set in Environment
 - [ ] After backend is live, `VITE_API_URL` in Vercel updated and frontend redeployed
 
-Once this is done, the site is on Vercel at your domain, and the backend is on Railway (or your chosen host) feeding the API.
+Once this is done, the site is on Vercel at your domain, and the backend is on Render feeding the API.

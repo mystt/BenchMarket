@@ -1,0 +1,24 @@
+# Render Blueprint — backend API for BenchMarket
+# Connect this repo at render.com → New → Blueprint, or add as Web Service manually.
+
+services:
+  - type: web
+    name: benchmarket-api
+    runtime: node
+    region: oregon
+
+    # Monorepo: backend lives in backend/
+    rootDir: backend
+
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+
+    # Render sets PORT automatically
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Add these in Render Dashboard → Environment (sensitive values):
+      # OPENAI_API_KEY = your OpenAI API key (required for AI)
+      # Optional: DATABASE_URL, HEDERA_*, AUTO_PLAY_DELAY_MS, etc.

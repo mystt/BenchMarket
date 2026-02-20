@@ -2,9 +2,9 @@ import { join } from "path";
 import { config as loadEnv } from "dotenv";
 import { z } from "zod";
 
-// Load .env from project root (npm run dev:backend runs from backend/, so parent = root)
-const rootEnv = join(process.cwd(), "..", ".env");
-loadEnv({ path: rootEnv });
+// Load .env: try repo root (parent of backend) then backend dir (Render cwd)
+loadEnv({ path: join(process.cwd(), "..", ".env") });
+loadEnv({ path: join(process.cwd(), ".env") });
 
 const env = z.object({
   PORT: z.coerce.number().default(4000),

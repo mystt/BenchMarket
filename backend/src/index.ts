@@ -20,7 +20,10 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req, res) =>
-  res.json({ ok: true, openaiConfigured: !!config.openaiApiKey })
+  res.json({
+    ok: true,
+    openaiConfigured: !!(config.openaiApiKey ?? process.env.OPENAI_API_KEY),
+  })
 );
 
 app.use("/api/blackjack", blackjackRouter);

@@ -2,14 +2,16 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import type { AIProvider, AIResponse } from "./types.js";
 
-if (!config.openaiApiKey) {
+const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "";
+
+if (!apiKey) {
   console.warn("OPENAI_API_KEY not set; OpenAI provider will not be available.");
 }
 
 let client: OpenAI | null = null;
 function getClient(): OpenAI | null {
-  if (client === null && config.openaiApiKey) {
-    client = new OpenAI({ apiKey: config.openaiApiKey });
+  if (client === null && apiKey) {
+    client = new OpenAI({ apiKey });
   }
   return client;
 }

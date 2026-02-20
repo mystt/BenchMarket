@@ -81,6 +81,7 @@ async function runCropLoop(): Promise<void> {
             bushelsB: 0,
             historyA: [],
             historyB: [],
+            priceIndex: 0,
           } satisfies CropVsState);
         const { result, newState } = await runCropSingleStepVs(modelAId, modelBId, state);
         cropVsState = newState;

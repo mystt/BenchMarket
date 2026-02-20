@@ -304,6 +304,8 @@ export type CropVsState = {
   bushelsB: number;
   historyA: CropPortfolioSnapshot[];
   historyB: CropPortfolioSnapshot[];
+  /** Index into price series for next run — cycles through so each run gets a different price (chart shows value changes). */
+  priceIndex: number;
 };
 
 function trimHistory<T>(arr: T[], max: number): T[] {
@@ -329,7 +331,8 @@ export async function runCropSingleStepVs(
   const prices = await fetchCornPrices();
   if (prices.length < 1) throw new Error("No corn price data");
 
-  const point = prices[prices.length - 1];
+  const idx = state.priceIndex % prices.length;
+  const point = prices[idx];
   const date = point.date;
   const pricePerBushel = point.pricePerBushel;
   const priceCentsPerBushel = Math.round(pricePerBushel * 100);
@@ -425,6 +428,7 @@ export async function runCropSingleStepVs(
     bushelsB,
     historyA,
     historyB,
+    priceIndex: state.priceIndex + 1,
   };
 
   return { result, newState };

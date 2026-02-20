@@ -1634,6 +1634,8 @@ export default function App() {
       setError(isNetwork ? "Connection lost during hand — partial result shown. The hand may have completed on the server; check the leaderboard." : msg);
     } finally {
       setStreamingVs(false);
+      setVsState((prev) => ({ ...prev, vsHandReasonings: [] }));
+      setLastResult({ vs: Date.now() });
       refetchLeaderboard();
       fetch(`${API}/market/bets`).then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (d?.bets != null) setMarketBets(d.bets);
@@ -2158,7 +2160,17 @@ export default function App() {
           </div>
         </div>
       )}
-      {models.length >= 2 && (
+      {models.length >= 2 && (() => {
+        const displayVsHands: VsHandReasoningEntry[] =
+          vsState.vsHandReasonings.length > 0
+            ? [...persistedVsHandReasonings, ...vsState.vsHandReasonings].map((e, i, arr) => ({
+                ...e,
+                handIndex: i + 1,
+                totalHands: arr.length,
+              }))
+            : persistedVsHandReasonings;
+        const lastStreamingIdx = vsState.vsHandReasonings.length > 0 ? persistedVsHandReasonings.length + vsState.vsHandReasonings.length - 1 : -1;
+        return (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 1000, marginBottom: 24, minHeight: 320 }}>
           {/* Model A: scrollable reasoning — one block per hand with bet + play reasoning */}
           <div style={{ display: "flex", flexDirection: "column", background: "#1c1917", borderRadius: 10, border: "1px solid #44403c", minHeight: 320, maxHeight: 520, overflow: "hidden" }}>
@@ -2166,10 +2178,10 @@ export default function App() {
               {models.find((m) => m.id === modelA)?.name ?? "Model A"} — scroll to review past hands
             </div>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-              {(vsState.vsHandReasonings.length === 0 && persistedVsHandReasonings.length === 0) && (
+              {(displayVsHands.length === 0) && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}
-              {(vsState.vsHandReasonings.length > 0 ? vsState.vsHandReasonings : persistedVsHandReasonings).map((entry, idx) => (
+              {displayVsHands.map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
                   {(entry.playerA.cards.length > 0 || entry.dealerUpcard) && (
@@ -2199,7 +2211,7 @@ export default function App() {
                   <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
                     {entry.playerA.reasoningText ? (
                       <><span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Play reasoning: </span>{entry.playerA.reasoningText}</>
-                    ) : (streamingVs && vsState.vsHandReasonings.length > 0 && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
+                    ) : (streamingVs && idx === lastStreamingIdx ? "…" : "—")}
                   </div>
                   {entry.playerA.outcome && (
                     <div style={{ marginTop: 8, fontSize: "0.8rem", color: entry.playerA.outcome === "win" ? "#86efac" : entry.playerA.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
@@ -2216,10 +2228,10 @@ export default function App() {
               {models.find((m) => m.id === modelB)?.name ?? "Model B"} — scroll to review past hands
             </div>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", overflowAnchor: "none", overscrollBehavior: "contain", padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-              {(vsState.vsHandReasonings.length === 0 && persistedVsHandReasonings.length === 0) && (
+              {(displayVsHands.length === 0) && (
                 <div style={{ color: "#78716c", fontSize: "0.9rem" }}>{streamingVs ? "Waiting for first hand…" : "—"}</div>
               )}
-              {(vsState.vsHandReasonings.length > 0 ? vsState.vsHandReasonings : persistedVsHandReasonings).map((entry, idx) => (
+              {displayVsHands.map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
                   {(entry.playerB.cards.length > 0 || entry.dealerUpcard) && (
@@ -2249,7 +2261,7 @@ export default function App() {
                   <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
                     {entry.playerB.reasoningText ? (
                       <><span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Play reasoning: </span>{entry.playerB.reasoningText}</>
-                    ) : (streamingVs && vsState.vsHandReasonings.length > 0 && idx === vsState.vsHandReasonings.length - 1 ? "…" : "—")}
+                    ) : (streamingVs && idx === lastStreamingIdx ? "…" : "—")}
                   </div>
                   {entry.playerB.outcome && (
                     <div style={{ marginTop: 8, fontSize: "0.8rem", color: entry.playerB.outcome === "win" ? "#86efac" : entry.playerB.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
@@ -2261,7 +2273,8 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <div style={{ marginBottom: 24, padding: 16, background: "#18181b", borderRadius: 8, border: "1px solid #3f3f46" }}>
         <strong style={{ fontSize: "0.9rem" }}>Today's leaderboard (blackjack P/L over time)</strong>

@@ -1,6 +1,6 @@
 import { getAIProvider } from "../../ai/index.js";
 import { config } from "../../config.js";
-import { fetchCornPrices, type CornPricePoint } from "../../sources/corn.js";
+import { fetchCornPrices, fetchCornPricesForTrading, type CornPricePoint } from "../../sources/corn.js";
 import { settleCropNextTestBets } from "./market.js";
 
 const CROP_BANKROLL_CENTS = config.cropBankrollCents;
@@ -304,8 +304,6 @@ export type CropVsState = {
   bushelsB: number;
   historyA: CropPortfolioSnapshot[];
   historyB: CropPortfolioSnapshot[];
-  /** Index into price series for next run — cycles through so each run gets a different price (chart shows value changes). */
-  priceIndex: number;
 };
 
 function trimHistory<T>(arr: T[], max: number): T[] {
@@ -328,11 +326,10 @@ export async function runCropSingleStepVs(
   if (!providerB) throw new Error(`Unknown AI model: ${modelIdB}`);
   if (modelIdA === modelIdB) throw new Error("Choose two different models");
 
-  const prices = await fetchCornPrices();
+  const prices = await fetchCornPricesForTrading();
   if (prices.length < 1) throw new Error("No corn price data");
 
-  const idx = state.priceIndex % prices.length;
-  const point = prices[idx];
+  const point = prices[prices.length - 1]; // intraday: current price; fallback: latest daily close
   const date = point.date;
   const pricePerBushel = point.pricePerBushel;
   const priceCentsPerBushel = Math.round(pricePerBushel * 100);
@@ -428,7 +425,6 @@ export async function runCropSingleStepVs(
     bushelsB,
     historyA,
     historyB,
-    priceIndex: state.priceIndex + 1,
   };
 
   return { result, newState };

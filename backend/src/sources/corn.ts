@@ -14,6 +14,27 @@ const CORN_SYMBOL = "ZC=F";
 const DAYS_BACK = 60;
 const MIN_POINTS = 10;
 
+/** Fetch current price using intraday chart data (1h bars, last 5 days). Falls back to daily historical if chart fails. */
+export async function fetchCornPricesForTrading(): Promise<CornPricePoint[]> {
+  const yahooFinance = new YahooFinance();
+  const period1 = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  try {
+    const result = await yahooFinance.chart(CORN_SYMBOL, { period1, interval: "1h" });
+    const quotes = (result as { quotes?: Array<{ date?: Date; close?: number | null }> }).quotes ?? [];
+    const points: CornPricePoint[] = quotes
+      .filter((q) => q?.date && typeof q?.close === "number" && q.close !== null)
+      .map((q) => ({
+        date: (q.date as Date).toISOString(),
+        pricePerBushel: (q.close as number) / 100, // CME corn in cents/bu
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (points.length >= 1) return points;
+  } catch {
+    /* fall through to daily */
+  }
+  return fetchCornPrices();
+}
+
 export async function fetchCornPrices(): Promise<CornPricePoint[]> {
   const yahooFinance = new YahooFinance();
   const period1 = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

@@ -15,8 +15,9 @@ const MIN_POINTS = 10;
 
 export async function fetchCornPrices(): Promise<CornPricePoint[]> {
   const yahooFinance = new YahooFinance();
-  const period1 = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000);
-  const raw = await yahooFinance.historical(CORN_SYMBOL, { period1 });
+  const period1 = new Date(Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const period2 = new Date().toISOString().slice(0, 10);
+  const raw = await yahooFinance.historical(CORN_SYMBOL, { period1, period2 });
   if (!Array.isArray(raw) || raw.length < MIN_POINTS) {
     throw new Error(
       `Corn futures: insufficient data from Yahoo Finance (got ${raw?.length ?? 0}, need ${MIN_POINTS}+). Check connectivity and ZC=F availability.`

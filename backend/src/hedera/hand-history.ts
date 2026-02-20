@@ -1,6 +1,7 @@
 /**
- * Fetch blackjack hand history from HCS for display.
+ * Fetch blackjack hand history from HCS topic for display.
  * Used by GET /api/blackjack/hand-history to show persisted hand-by-hand data.
+ * Data must be on the topic; no DB fallback.
  */
 
 import { fetchTopicMessages } from "./mirror.js";
@@ -17,48 +18,60 @@ export type BlackjackHandEntry = {
   pnlCents: number | null;
 };
 
-/** Fetch blackjack hands from HCS for a given model and date. Returns in display order. */
+/** Resolve value supporting both camelCase and snake_case (format compatibility). */
+function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return undefined;
+}
+
+/** Fetch blackjack hands from HCS topic for a given model and date. Returns in display order. */
 export async function fetchBlackjackHandHistory(
   modelId: string,
   date: string
 ): Promise<BlackjackHandEntry[]> {
   if (!config.hederaTopicId) return [];
-  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 1000 });
-  const hands: BlackjackHandEntry[] = [];
   const dateSlice = String(date).slice(0, 10);
+  return fetchFromHcs(modelId, dateSlice);
+}
+
+async function fetchFromHcs(modelId: string, dateSlice: string): Promise<BlackjackHandEntry[]> {
+  const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
+  const hands: BlackjackHandEntry[] = [];
 
   for (const { message } of messages) {
     try {
       const parsed = JSON.parse(message) as Record<string, unknown>;
-      const domain = parsed.domain as string | undefined;
+      const domain = (get(parsed, "domain") as string) ?? (parsed.domain as string);
+      if (!domain) continue;
 
       if (domain === "blackjack") {
-        const mid = String(parsed.modelId ?? "");
-        const d = String(parsed.date ?? "").slice(0, 10);
+        const mid = String(get(parsed, "modelId", "model_id") ?? "").trim();
+        const d = String(get(parsed, "date") ?? "").slice(0, 10);
         if (mid === modelId && d === dateSlice) {
-          const playerCards = Array.isArray(parsed.playerCards)
-            ? (parsed.playerCards as string[])
-            : [];
+          const rawCards = get(parsed, "playerCards", "player_cards");
+          const playerCards = Array.isArray(rawCards) ? (rawCards as string[]) : [];
           hands.push({
             handIndex: hands.length + 1,
-            totalHands: 0, // filled below
-            betCents: typeof parsed.betCents === "number" ? parsed.betCents : null,
+            totalHands: 0,
+            betCents: typeof get(parsed, "betCents", "bet_cents") === "number" ? (get(parsed, "betCents", "bet_cents") as number) : null,
             playerCards,
-            dealerUpcard: typeof parsed.dealerUpcard === "string" ? parsed.dealerUpcard : null,
-            decision: typeof parsed.decision === "string" ? parsed.decision : null,
-            outcome: typeof parsed.outcome === "string" ? parsed.outcome : null,
-            pnlCents: typeof parsed.pnlCents === "number" ? parsed.pnlCents : null,
+            dealerUpcard: typeof get(parsed, "dealerUpcard", "dealer_upcard") === "string" ? (get(parsed, "dealerUpcard", "dealer_upcard") as string) : null,
+            decision: typeof get(parsed, "decision") === "string" ? (get(parsed, "decision") as string) : null,
+            outcome: typeof get(parsed, "outcome") === "string" ? (get(parsed, "outcome") as string) : null,
+            pnlCents: typeof get(parsed, "pnlCents", "pnl_cents") === "number" ? (get(parsed, "pnlCents", "pnl_cents") as number) : null,
           });
         }
       } else if (domain === "blackjack_vs") {
-        const modelAId = String(parsed.modelIdA ?? "");
-        const modelBId = String(parsed.modelBId ?? "");
-        const d = String(parsed.date ?? "").slice(0, 10);
+        const modelAId = String(get(parsed, "modelIdA", "model_id_a") ?? "").trim();
+        const modelBId = String(get(parsed, "modelBId", "model_b_id") ?? "").trim();
+        const d = String(get(parsed, "date") ?? "").slice(0, 10);
         if (d !== dateSlice) continue;
-        const pnlA = typeof parsed.pnlA === "number" ? parsed.pnlA : 0;
-        const pnlB = typeof parsed.pnlB === "number" ? parsed.pnlB : 0;
-        const outcomeA = String(parsed.outcomeA ?? "");
-        const outcomeB = String(parsed.outcomeB ?? "");
+        const pnlA = typeof get(parsed, "pnlA", "pnl_a") === "number" ? (get(parsed, "pnlA", "pnl_a") as number) : 0;
+        const pnlB = typeof get(parsed, "pnlB", "pnl_b") === "number" ? (get(parsed, "pnlB", "pnl_b") as number) : 0;
+        const outcomeA = String(get(parsed, "outcomeA", "outcome_a") ?? "");
+        const outcomeB = String(get(parsed, "outcomeB", "outcome_b") ?? "");
         if (modelAId === modelId) {
           hands.push({
             handIndex: hands.length + 1,
@@ -85,7 +98,7 @@ export async function fetchBlackjackHandHistory(
         }
       }
     } catch {
-      /* skip */
+      /* skip malformed */
     }
   }
 

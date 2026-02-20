@@ -15,8 +15,8 @@ const env = z.object({
   BLACKJACK_MAX_BET_CENTS: z.coerce.number().default(100_000), // $1000
   SPORTS_DAILY_CENTS: z.coerce.number().default(10_000_000),   // 100k
   CROP_BANKROLL_CENTS: z.coerce.number().default(10_000_000), // 100k
-  /** Delay in ms between each auto-play hand (0 = off). e.g. 2000 = 2s between hands for continuous simulation */
-  AUTO_PLAY_DELAY_MS: z.coerce.number().default(0),
+  /** Delay in ms between each auto-play hand (0 = off). e.g. 300000 = 5 min so users can bet and we save credits */
+  AUTO_PLAY_DELAY_MS: z.coerce.number().default(300000),
   /** Bet size per auto-play hand when AI doesn't decide (cents). e.g. 1000 = $10 */
   AUTO_PLAY_BET_CENTS: z.coerce.number().default(1000),
   /** Hedera HCS: operator account id (e.g. 0.0.1234). If set with key/topic, AI results are submitted to the topic. */

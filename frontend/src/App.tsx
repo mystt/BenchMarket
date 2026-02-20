@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // Hit backend directly (avoids proxy issues). Base URL including /api
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000";
+const API_BASE = (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://127.0.0.1:4000";
 const API = `${API_BASE}/api`;
 
 function formatDollars(cents: unknown): string {
@@ -487,7 +487,7 @@ function CropBenchmarkSection({ API, onBalanceChange }: { API: string; onBalance
             {pointsB.trim() && <polyline fill="none" stroke="#f59e0b" strokeWidth={2} points={pointsB} />}
             {historyA.length > 0 && (
               <text x={padding.left} y={padding.top + 12} fill="#71717a" fontSize={11}>
-                ${(maxV / 100).toLocaleString("en-US", 0)}
+                ${(maxV / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 } as Intl.NumberFormatOptions)}
               </text>
             )}
             {historyA.length > 0 && (
@@ -878,6 +878,51 @@ export default function App() {
   const [next3Loading, setNext3Loading] = useState(false);
   const [oddsHistoryByModel, setOddsHistoryByModel] = useState<Record<string, OddsHistoryPoint[]>>({});
   const [next3OddsHistory, setNext3OddsHistory] = useState<Next3OddsHistoryPoint[]>([]);
+  const [autoPlayStatus, setAutoPlayStatus] = useState<{ enabled: boolean; nextHandAt: string | null; lastHandAt: string | null; intervalMs: number; modelAId: string | null; modelBId: string | null } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const lastAutoPlayTriggeredRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let t: ReturnType<typeof setInterval> | null = null;
+    const poll = () => {
+      fetch(`${API}/blackjack/auto-play-status`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setAutoPlayStatus(d))
+        .catch(() => setAutoPlayStatus(null));
+    };
+    poll();
+    t = setInterval(poll, 15000);
+    return () => { if (t) clearInterval(t); };
+  }, []);
+  useEffect(() => {
+    if (!autoPlayStatus?.enabled || !autoPlayStatus?.nextHandAt) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [autoPlayStatus?.enabled, autoPlayStatus?.nextHandAt]);
+
+  useEffect(() => {
+    if (!autoPlayStatus?.enabled) return;
+    const run = () => {
+      try {
+        refetchLeaderboard();
+      } catch (_) {}
+      fetch(`${API}/market/bets`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) {
+            setMarketBets(d.bets ?? []);
+            setNext3Bets(d.next3Bets ?? []);
+            try {
+              fetchUserBalance();
+            } catch (_) {}
+          }
+        })
+        .catch(() => {});
+    };
+    const interval = setInterval(run, 20000);
+    run();
+    return () => clearInterval(interval);
+  }, [autoPlayStatus?.enabled]);
 
   useEffect(() => {
     setApiUnreachable(false);
@@ -1223,13 +1268,7 @@ export default function App() {
     }
   };
 
-  const playStreamVs = async () => {
-    const hands = Math.max(1, Math.min(100, Math.round(Number(numHandsVs) || 1)));
-    if (!modelA || !modelB || modelA === modelB) {
-      setError("Select two different models for VS.");
-      return;
-    }
-    setError("");
+  const runVsStreamWithModels = useCallback(async (modelAId: string, modelBId: string, hands: number) => {
     setStreamingVs(true);
     setVsState({
       handIndex: 0,
@@ -1260,7 +1299,7 @@ export default function App() {
           "Content-Type": "application/json",
           "X-Blackjack-Mode": "vs",
         },
-        body: JSON.stringify({ modelIdA: modelA, modelIdB: modelB, hands }),
+        body: JSON.stringify({ modelIdA: modelAId, modelIdB: modelBId, hands }),
       });
       if (!res.ok || !res.body) {
         const errText = await res.text();
@@ -1422,7 +1461,9 @@ export default function App() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "VS stream failed");
+      const msg = e instanceof Error ? e.message : "VS stream failed";
+      const isNetwork = /network|fetch|failed to fetch|connection|aborted|timeout/i.test(msg);
+      setError(isNetwork ? "Connection lost during hand — partial result shown. The hand may have completed on the server; check the leaderboard." : msg);
     } finally {
       setStreamingVs(false);
       refetchLeaderboard();
@@ -1431,7 +1472,29 @@ export default function App() {
         if (d?.next3Bets != null) setNext3Bets(d.next3Bets);
       }).catch(() => {});
     }
+  }, [refetchLeaderboard]);
+
+  const playStreamVs = async () => {
+    const hands = Math.max(1, Math.min(100, Math.round(Number(numHandsVs) || 1)));
+    if (!modelA || !modelB || modelA === modelB) {
+      setError("Select two different models for VS.");
+      return;
+    }
+    setError("");
+    await runVsStreamWithModels(modelA, modelB, hands);
   };
+
+  useEffect(() => {
+    if (!autoPlayStatus?.enabled || !autoPlayStatus?.nextHandAt || !autoPlayStatus?.modelAId || !autoPlayStatus?.modelBId || streamingVs) return;
+    const nextAt = new Date(autoPlayStatus.nextHandAt).getTime();
+    if (now < nextAt) {
+      lastAutoPlayTriggeredRef.current = null;
+      return;
+    }
+    if (lastAutoPlayTriggeredRef.current === autoPlayStatus.nextHandAt) return;
+    lastAutoPlayTriggeredRef.current = autoPlayStatus.nextHandAt;
+    runVsStreamWithModels(autoPlayStatus.modelAId, autoPlayStatus.modelBId, 1);
+  }, [autoPlayStatus?.enabled, autoPlayStatus?.nextHandAt, autoPlayStatus?.modelAId, autoPlayStatus?.modelBId, now, streamingVs, runVsStreamWithModels]);
 
   useEffect(() => {
     reasoningEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1871,9 +1934,40 @@ export default function App() {
 
       <hr style={{ border: "none", borderTop: "1px solid #3f3f46", margin: "32px 0 24px" }} />
 
+      {autoPlayStatus?.enabled && (
+        <div style={{ marginBottom: 20, padding: 16, background: "#0f172a", borderRadius: 10, border: "1px solid #334155" }}>
+          <div style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: 6 }}>Auto-play (2 VS AIs)</div>
+          <div style={{ fontSize: "1rem", color: "#e2e8f0", fontWeight: 600 }}>
+            {autoPlayStatus.modelAId && autoPlayStatus.modelBId
+              ? `${models.find((m) => m.id === autoPlayStatus.modelAId)?.name ?? autoPlayStatus.modelAId} vs ${models.find((m) => m.id === autoPlayStatus.modelBId)?.name ?? autoPlayStatus.modelBId}`
+              : "— vs —"}
+          </div>
+          <div style={{ marginTop: 8, fontSize: "0.95rem", color: "#fde047" }}>
+            {autoPlayStatus.nextHandAt
+              ? (() => {
+                  const rem = Math.max(0, new Date(autoPlayStatus.nextHandAt).getTime() - now);
+                  const m = Math.floor(rem / 60000);
+                  const s = Math.floor((rem % 60000) / 1000);
+                  return `Next VS hand in ${m}:${s.toString().padStart(2, "0")}`;
+                })()
+              : "Next hand: soon…"}
+          </div>
+          {autoPlayStatus.lastHandAt && (
+            <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#94a3b8" }}>
+              Last hand: {(() => {
+                const sec = Math.floor((now - new Date(autoPlayStatus.lastHandAt).getTime()) / 1000);
+                if (sec < 60) return `${sec}s ago`;
+                const min = Math.floor(sec / 60);
+                return `${min} min ago`;
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
       <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Two AIs (VS)</h2>
       <p style={{ color: "#a1a1aa", marginBottom: 16 }}>
-        Same table, same dealer. Each AI has their own hand and bankroll. Pick two models and watch them play.
+        Same table, same dealer. Auto-play runs one VS hand every 5 min. Use &quot;Play 3 hands VS&quot; below to test on demand.
       </p>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
         <div>

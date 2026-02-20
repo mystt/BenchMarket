@@ -2,6 +2,7 @@ import { Router } from "express";
 import { config } from "../config.js";
 import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, getAIBetCents, type StreamEvent, type StreamEventVs } from "../domains/blackjack/service.js";
 import { getAIProviders } from "../ai/index.js";
+import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 
 export const blackjackRouter = Router();
 
@@ -13,6 +14,10 @@ const MODEL_OPTIONS = [
 
 blackjackRouter.get("/models", (_req, res) => {
   res.json({ models: MODEL_OPTIONS });
+});
+
+blackjackRouter.get("/auto-play-status", (_req, res) => {
+  res.json(getAutoPlayStatus());
 });
 
 blackjackRouter.get("/daily/:modelId", async (req, res) => {
@@ -49,6 +54,8 @@ blackjackRouter.post("/play", async (req, res) => {
 });
 
 /** SSE: single AI — body { modelId, hands }. VS — header X-Blackjack-Mode: vs and body { modelIdA, modelIdB, hands }. Same URL so no 404. */
+const PLAY_STREAM_TIMEOUT_MS = 5 * 60 * 1000; // 5 min so long AI runs don't get cut by server timeout
+
 blackjackRouter.post("/play-stream", async (req, res) => {
   const body = req.body ?? {};
   const q = req.query as Record<string, string | undefined>;
@@ -64,18 +71,40 @@ blackjackRouter.post("/play-stream", async (req, res) => {
     if (modelIdA === modelIdB) {
       return res.status(400).json({ error: "Choose two different models" });
     }
+    req.socket?.setTimeout(PLAY_STREAM_TIMEOUT_MS);
     const effectiveMaxBet = config.blackjackMaxBetCents;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
-    const sendVs = (ev: StreamEventVs) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
+    let streamClosed = false;
+    const onClose = () => {
+      streamClosed = true;
+    };
+    res.on("close", onClose);
+    res.on("error", onClose);
+    const sendVs = (ev: StreamEventVs) => {
+      if (streamClosed) return;
+      try {
+        const ok = res.write(`data: ${JSON.stringify(ev)}\n\n`);
+        if (!ok) res.once("drain", () => {});
+      } catch (e) {
+        streamClosed = true;
+        console.warn("Play-stream VS: client connection lost, continuing hand on server:", e instanceof Error ? e.message : String(e));
+      }
+    };
+    const claimed = claimPendingHand(modelIdA, modelIdB);
     try {
       await playHandsStreamVs(modelIdA, modelIdB, effectiveMaxBet, hands, sendVs);
+      if (claimed) setAutoPlayLastHandAt();
     } catch (e) {
-      sendVs({ type: "error", message: e instanceof Error ? e.message : String(e) });
+      if (!streamClosed) sendVs({ type: "error", message: e instanceof Error ? e.message : String(e) });
     } finally {
-      res.end();
+      res.removeListener("close", onClose);
+      res.removeListener("error", onClose);
+      try {
+        res.end();
+      } catch (_) {}
     }
     return;
   }

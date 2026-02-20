@@ -1076,7 +1076,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedModel) return;
-    fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(selectedModel)}&date=${encodeURIComponent(today)}`)
+    fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(selectedModel)}&date=all`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         const hands = d?.hands ?? [];
@@ -1099,15 +1099,15 @@ export default function App() {
         );
       })
       .catch(() => setPersistedHandHistory([]));
-  }, [API, selectedModel, today, lastResult]);
+  }, [API, selectedModel, lastResult]);
   useEffect(() => {
     if (!modelA || !modelB || modelA === modelB) {
       setPersistedVsHandReasonings([]);
       return;
     }
     Promise.all([
-      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelA)}&date=${encodeURIComponent(today)}`).then((r) => (r.ok ? r.json() : null)),
-      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelB)}&date=${encodeURIComponent(today)}`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelA)}&date=all`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/blackjack/hand-history?modelId=${encodeURIComponent(modelB)}&date=all`).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([dA, dB]) => {
         const handsA = (dA?.hands ?? []) as Array<{ handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; dealerCards?: string[]; dealerTotal?: number | null; outcome?: string | null; pnlCents?: number | null }>;
@@ -1130,7 +1130,7 @@ export default function App() {
         setPersistedVsHandReasonings(merged);
       })
       .catch(() => setPersistedVsHandReasonings([]));
-  }, [API, modelA, modelB, today, lastResult]);
+  }, [API, modelA, modelB, lastResult]);
   useEffect(() => {
     refetchLeaderboard();
   }, [lastResult, refetchLeaderboard]);

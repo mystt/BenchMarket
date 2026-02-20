@@ -21,14 +21,15 @@ blackjackRouter.get("/auto-play-status", (_req, res) => {
   res.json(getAutoPlayStatus());
 });
 
-/** GET /api/blackjack/hand-history — persisted hand list from HCS. Query: date (YYYY-MM-DD), modelId. */
+/** GET /api/blackjack/hand-history — persisted hand list from HCS. Query: modelId, date (YYYY-MM-DD, or "all" / omit for all dates). */
 blackjackRouter.get("/hand-history", async (req, res) => {
   try {
     const modelId = String(req.query.modelId ?? "").trim();
-    const date = String(req.query.date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const dateParam = String(req.query.date ?? "").trim().toLowerCase();
+    const date = dateParam === "all" || dateParam === "" ? "all" : String(dateParam).slice(0, 10);
     if (!modelId) return res.status(400).json({ error: "modelId required" });
     const hands = await fetchBlackjackHandHistory(modelId, date);
-    res.json({ modelId, date, hands });
+    res.json({ modelId, date: date === "all" ? "all" : date, hands });
   } catch (e) {
     console.error("GET /blackjack/hand-history error:", e);
     res.status(500).json({ error: String(e instanceof Error ? e.message : e) });

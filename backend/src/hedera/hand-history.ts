@@ -28,14 +28,14 @@ function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
   return undefined;
 }
 
-/** Fetch blackjack hands from HCS topic for a given model and date. Returns in display order. */
+/** Fetch blackjack hands from HCS topic. date: YYYY-MM-DD or "all" for no date filter. */
 export async function fetchBlackjackHandHistory(
   modelId: string,
   date: string
 ): Promise<BlackjackHandEntry[]> {
   if (!config.hederaTopicId) return [];
-  const dateSlice = String(date).slice(0, 10);
-  return fetchFromHcs(modelId, dateSlice);
+  const dateFilter = date === "all" || !date ? null : String(date).slice(0, 10);
+  return fetchFromHcs(modelId, dateFilter);
 }
 
 async function fetchFromHcs(modelId: string, dateSlice: string): Promise<BlackjackHandEntry[]> {
@@ -51,7 +51,8 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
       if (domain === "blackjack") {
         const mid = String(get(parsed, "modelId", "model_id") ?? "").trim();
         const d = String(get(parsed, "date") ?? "").slice(0, 10);
-        if (mid === modelId && d === dateSlice) {
+        if (mid !== modelId) continue;
+        if (dateFilter != null && d !== dateFilter) continue;
           const rawCards = get(parsed, "playerCards", "player_cards");
           const playerCards = Array.isArray(rawCards) ? (rawCards as string[]) : [];
           hands.push({
@@ -64,12 +65,11 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
             outcome: typeof get(parsed, "outcome") === "string" ? (get(parsed, "outcome") as string) : null,
             pnlCents: typeof get(parsed, "pnlCents", "pnl_cents") === "number" ? (get(parsed, "pnlCents", "pnl_cents") as number) : null,
           });
-        }
       } else if (domain === "blackjack_vs") {
         const modelAId = String(get(parsed, "modelIdA", "model_id_a") ?? "").trim();
         const modelBId = String(get(parsed, "modelBId", "model_b_id") ?? "").trim();
         const d = String(get(parsed, "date") ?? "").slice(0, 10);
-        if (d !== dateSlice) continue;
+        if (dateFilter != null && d !== dateFilter) continue;
         const pnlA = typeof get(parsed, "pnlA", "pnl_a") === "number" ? (get(parsed, "pnlA", "pnl_a") as number) : 0;
         const pnlB = typeof get(parsed, "pnlB", "pnl_b") === "number" ? (get(parsed, "pnlB", "pnl_b") as number) : 0;
         const outcomeA = String(get(parsed, "outcomeA", "outcome_a") ?? "");
@@ -124,5 +124,8 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
   hands.forEach((h) => {
     h.totalHands = total;
   });
+  if (total > 0) {
+    console.log(`[HCS Hand History] ${modelId} date=${dateFilter ?? "all"}: ${total} hands`);
+  }
   return hands;
 }

@@ -1,24 +1,17 @@
 /**
- * Fetch blackjack hand history from HCS topic for display.
- * Used by GET /api/blackjack/hand-history to show persisted hand-by-hand data.
- * Data must be on the topic; no DB fallback.
+ * Blackjack hand history — mirrors the crop pattern.
+ * Serves from in-memory store (updated in real-time when hands play, loaded from HCS on hydrate).
  */
 
 import { fetchTopicMessages } from "./mirror.js";
 import { config } from "../config.js";
+import {
+  getBlackjackHands,
+  loadBlackjackHandHistoryFromHcs,
+  type BlackjackHandEntry,
+} from "./blackjack-hand-store.js";
 
-export type BlackjackHandEntry = {
-  handIndex: number;
-  totalHands: number;
-  betCents: number | null;
-  playerCards: string[];
-  dealerUpcard: string | null;
-  dealerCards?: string[];
-  dealerTotal?: number | null;
-  decision: string | null;
-  outcome: string | null;
-  pnlCents: number | null;
-};
+export type { BlackjackHandEntry } from "./blackjack-hand-store.js";
 
 /** Resolve value supporting both camelCase and snake_case (format compatibility). */
 function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
@@ -28,19 +21,38 @@ function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
   return undefined;
 }
 
-/** Fetch blackjack hands from HCS topic. date: YYYY-MM-DD or "all" for no date filter. */
+/** Fetch blackjack hands. Serves from in-memory store (like crop lastResult); falls back to HCS when empty. */
 export async function fetchBlackjackHandHistory(
   modelId: string,
   date: string
 ): Promise<BlackjackHandEntry[]> {
-  if (!config.hederaTopicId) return [];
   const dateFilter = date === "all" || !date ? null : String(date).slice(0, 10);
-  return fetchFromHcs(modelId, dateFilter);
+  let hands = getBlackjackHands(modelId, dateFilter);
+  if (hands.length > 0) return hands;
+  if (!config.hederaTopicId) return [];
+  const byModel = await parseAllMessagesToHandsByModel(dateFilter);
+  if (byModel.size > 0) {
+    loadBlackjackHandHistoryFromHcs(byModel);
+  }
+  return getBlackjackHands(modelId, dateFilter);
 }
 
-async function fetchFromHcs(modelId: string, dateSlice: string): Promise<BlackjackHandEntry[]> {
+/** Parse all topic messages into hands by model. Used by hydrate and fallback fetch. */
+export async function parseAllMessagesToHandsByModel(
+  dateFilter: string | null
+): Promise<Map<string, BlackjackHandEntry[]>> {
   const messages = await fetchTopicMessages({ order: "asc", maxMessages: 5000 });
-  const hands: BlackjackHandEntry[] = [];
+  const byModel = new Map<string, BlackjackHandEntry[]>();
+
+  const push = (modelId: string, entry: Omit<BlackjackHandEntry, "handIndex" | "totalHands">) => {
+    const list = byModel.get(modelId) ?? [];
+    list.push({
+      ...entry,
+      handIndex: list.length + 1,
+      totalHands: 0,
+    });
+    byModel.set(modelId, list);
+  };
 
   for (const { message } of messages) {
     try {
@@ -51,20 +63,19 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
       if (domain === "blackjack") {
         const mid = String(get(parsed, "modelId", "model_id") ?? "").trim();
         const d = String(get(parsed, "date") ?? "").slice(0, 10);
-        if (mid !== modelId) continue;
+        if (!mid) continue;
         if (dateFilter != null && d !== dateFilter) continue;
-          const rawCards = get(parsed, "playerCards", "player_cards");
-          const playerCards = Array.isArray(rawCards) ? (rawCards as string[]) : [];
-          hands.push({
-            handIndex: hands.length + 1,
-            totalHands: 0,
-            betCents: typeof get(parsed, "betCents", "bet_cents") === "number" ? (get(parsed, "betCents", "bet_cents") as number) : null,
-            playerCards,
-            dealerUpcard: typeof get(parsed, "dealerUpcard", "dealer_upcard") === "string" ? (get(parsed, "dealerUpcard", "dealer_upcard") as string) : null,
-            decision: typeof get(parsed, "decision") === "string" ? (get(parsed, "decision") as string) : null,
-            outcome: typeof get(parsed, "outcome") === "string" ? (get(parsed, "outcome") as string) : null,
-            pnlCents: typeof get(parsed, "pnlCents", "pnl_cents") === "number" ? (get(parsed, "pnlCents", "pnl_cents") as number) : null,
-          });
+        const rawCards = get(parsed, "playerCards", "player_cards");
+        const playerCards = Array.isArray(rawCards) ? (rawCards as string[]) : [];
+        push(mid, {
+          date: d || undefined,
+          betCents: typeof get(parsed, "betCents", "bet_cents") === "number" ? (get(parsed, "betCents", "bet_cents") as number) : null,
+          playerCards,
+          dealerUpcard: typeof get(parsed, "dealerUpcard", "dealer_upcard") === "string" ? (get(parsed, "dealerUpcard", "dealer_upcard") as string) : null,
+          decision: typeof get(parsed, "decision") === "string" ? (get(parsed, "decision") as string) : null,
+          outcome: typeof get(parsed, "outcome") === "string" ? (get(parsed, "outcome") as string) : null,
+          pnlCents: typeof get(parsed, "pnlCents", "pnl_cents") === "number" ? (get(parsed, "pnlCents", "pnl_cents") as number) : null,
+        });
       } else if (domain === "blackjack_vs") {
         const modelAId = String(get(parsed, "modelIdA", "model_id_a") ?? "").trim();
         const modelBId = String(get(parsed, "modelBId", "model_b_id") ?? "").trim();
@@ -86,10 +97,9 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
         const betB = typeof get(parsed, "betB", "bet_b") === "number" ? (get(parsed, "betB", "bet_b") as number) : null;
         const decisionA = typeof get(parsed, "decisionA", "decision_a") === "string" ? (get(parsed, "decisionA", "decision_a") as string) : null;
         const decisionB = typeof get(parsed, "decisionB", "decision_b") === "string" ? (get(parsed, "decisionB", "decision_b") as string) : null;
-        if (modelAId === modelId) {
-          hands.push({
-            handIndex: hands.length + 1,
-            totalHands: 0,
+        if (modelAId) {
+          push(modelAId, {
+            date: d || undefined,
             betCents: betA,
             playerCards: playerACards,
             dealerUpcard: dealerUpcard ?? null,
@@ -100,10 +110,9 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
             pnlCents: pnlA,
           });
         }
-        if (modelBId === modelId) {
-          hands.push({
-            handIndex: hands.length + 1,
-            totalHands: 0,
+        if (modelBId) {
+          push(modelBId, {
+            date: d || undefined,
             betCents: betB,
             playerCards: playerBCards,
             dealerUpcard: dealerUpcard ?? null,
@@ -120,12 +129,11 @@ async function fetchFromHcs(modelId: string, dateSlice: string): Promise<Blackja
     }
   }
 
-  const total = hands.length;
-  hands.forEach((h) => {
-    h.totalHands = total;
-  });
-  if (total > 0) {
-    console.log(`[HCS Hand History] ${modelId} date=${dateFilter ?? "all"}: ${total} hands`);
+  for (const list of byModel.values()) {
+    const total = list.length;
+    list.forEach((h) => {
+      h.totalHands = total;
+    });
   }
-  return hands;
+  return byModel;
 }

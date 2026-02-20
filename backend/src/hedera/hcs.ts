@@ -114,7 +114,7 @@ export async function submitAiResult(payload: AiResultPayload): Promise<void> {
     if (payload.domain === "blackjack") {
       console.log("[HCS] Submitted blackjack:", (payload as { modelId?: string }).modelId, (payload as { date?: string }).date);
     } else if (payload.domain === "blackjack_vs") {
-      console.log("[HCS] Submitted blackjack_vs:", (payload as { modelIdA?: string }).modelIdA, "vs", (payload as { modelIdB?: string }).modelBId, (payload as { date?: string }).date);
+      console.log("[HCS] Submitted blackjack_vs:", (payload as { modelIdA?: string }).modelIdA, "vs", (payload as { modelIdB?: string }).modelIdB, (payload as { date?: string }).date);
     } else if (payload.domain === "crop_decision") {
       console.log("[HCS] Submitted crop_decision:", payload.modelAId, "vs", payload.modelBId);
     }

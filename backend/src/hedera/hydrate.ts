@@ -7,6 +7,8 @@ import { config } from "../config.js";
 import { fetchTopicMessages } from "./mirror.js";
 import { loadBlackjackHandsFromHedera, recomputeDailyBankrollsFromHands } from "../db/memory-db.js";
 import { setCropVsStateFromHydration } from "../jobs/autoPlayCrop.js";
+import { parseAllMessagesToHandsByModel } from "./hand-history.js";
+import { loadBlackjackHandHistoryFromHcs } from "./blackjack-hand-store.js";
 import type { CropVsState, CropPortfolioSnapshot } from "../domains/crop/service.js";
 
 export async function hydrateFromHedera(): Promise<void> {
@@ -84,6 +86,12 @@ export async function hydrateFromHedera(): Promise<void> {
     loadBlackjackHandsFromHedera(blackjackHands);
     recomputeDailyBankrollsFromHands(config.blackjackDailyCents);
     console.log(`[HCS Hydrate] Loaded ${blackjackHands.length} blackjack hands`);
+  }
+  const handHistoryByModel = await parseAllMessagesToHandsByModel(null);
+  if (handHistoryByModel.size > 0) {
+    loadBlackjackHandHistoryFromHcs(handHistoryByModel);
+    const total = Array.from(handHistoryByModel.values()).reduce((s, list) => s + list.length, 0);
+    console.log(`[HCS Hydrate] Loaded blackjack hand history: ${total} hands for ${handHistoryByModel.size} models`);
   }
   if (cropState && cropModelAId && cropModelBId) {
     setCropVsStateFromHydration(cropState, { modelAId: cropModelAId, modelBId: cropModelBId });

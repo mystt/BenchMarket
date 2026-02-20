@@ -12,6 +12,7 @@ import {
 } from "./engine.js";
 import { buildBlackjackPrompt, buildBetPrompt } from "./prompt.js";
 import { submitAiResult } from "../../hedera/hcs.js";
+import { appendBlackjackHand } from "../../hedera/blackjack-hand-store.js";
 
 const BLACKJACK_DAILY_CENTS = config.blackjackDailyCents;
 const MIN_BET_CENTS = config.blackjackMinBetCents;
@@ -361,6 +362,16 @@ export async function playHandsStream(
       decision: lastDecision,
     }).catch(() => {});
 
+    appendBlackjackHand(modelId, {
+      date,
+      betCents,
+      playerCards: [...playerCards],
+      dealerUpcard,
+      decision: lastDecision,
+      outcome,
+      pnlCents,
+    });
+
     onEvent({ type: "outcome", outcome, pnlCents, balanceCentsAfter });
     onEvent({ type: "hand_end", handIndex: handIndex + 1 });
   }
@@ -546,6 +557,29 @@ export async function playHandsStreamVs(
       decisionA: resultA.lastDecision,
       decisionB: resultB.lastDecision,
     }).catch(() => {});
+
+    appendBlackjackHand(modelIdA, {
+      date,
+      betCents: betA.betCents,
+      playerCards: resultA.cards,
+      dealerUpcard,
+      dealerCards: dealerCards.map(String),
+      dealerTotal: handValue(dealerCards),
+      decision: resultA.lastDecision,
+      outcome: outcomeA,
+      pnlCents: pnlA,
+    });
+    appendBlackjackHand(modelIdB, {
+      date,
+      betCents: betB.betCents,
+      playerCards: resultB.cards,
+      dealerUpcard,
+      dealerCards: dealerCards.map(String),
+      dealerTotal: handValue(dealerCards),
+      decision: resultB.lastDecision,
+      outcome: outcomeB,
+      pnlCents: pnlB,
+    });
 
     onEvent({
       type: "outcome_vs",

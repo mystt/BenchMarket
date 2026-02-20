@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
@@ -31,10 +32,11 @@ app.use("/api/market", marketRouter);
 app.use("/api/crop", cropRouter);
 app.use("/api/user", userRouter);
 
-// Production: serve built frontend (SPA) so one deploy = one origin
-if (isProduction && publicDir) {
+// Production: serve built frontend only if present (optional for split Vercel+Render deploy)
+const indexPath = path.join(publicDir, "index.html");
+if (isProduction && fs.existsSync(indexPath)) {
   app.use(express.static(publicDir));
-  app.get("*", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+  app.get("*", (_req, res) => res.sendFile(indexPath));
 }
 
 // JSON 404 for unknown API routes (and in dev for any unknown path)

@@ -54,7 +54,7 @@ type StreamEvVs =
   | { type: "error"; message: string }
   | { type: "done" };
 
-type TabId = "home" | "blackjack" | "crop";
+type TabId = "home" | "blackjack" | "crop" | "profile";
 type AIModel = { id: string; name: string };
 
 /** Always show both models in dropdowns; same OpenAI key works for both */
@@ -1003,6 +1003,16 @@ export default function App() {
   const [userDailyClaimedToday, setUserDailyClaimedToday] = useState(false);
   const [userDailyLoading, setUserDailyLoading] = useState(false);
   const [userWatchAdLoading, setUserWatchAdLoading] = useState(false);
+  const [profile, setProfile] = useState<{
+    balanceCents: number;
+    dailyClaimedToday: boolean;
+    totalWageredCents: number;
+    totalPnlCents: number;
+    performanceBets: PerformanceBet[];
+    cropNextTestBets: { id: string; model_a_id: string; model_b_id: string; direction: string; amount_cents: number; outcome: string; payout_cents: number | null }[];
+    cropLongTermBets: { id: string; model_id: string; period: string; direction: string; amount_cents: number; outcome: string; payout_cents: number | null }[];
+  } | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const fetchUserBalance = useCallback(() => {
     fetch(`${API}/user/balance`)
@@ -1021,6 +1031,19 @@ export default function App() {
   useEffect(() => {
     fetchUserBalance();
   }, [lastResult, fetchUserBalance]);
+
+  const fetchProfile = useCallback(() => {
+    setProfileLoading(true);
+    fetch(`${API}/user/profile`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setProfile(d); })
+      .catch(() => setProfile(null))
+      .finally(() => setProfileLoading(false));
+  }, [API]);
+  useEffect(() => {
+    if (activeTab === "profile") fetchProfile();
+  }, [activeTab, fetchProfile]);
+
   const [marketPeriod, setMarketPeriod] = useState(() => new Date().toISOString().slice(0, 10));
   const [marketModel, setMarketModel] = useState(AI_MODEL_OPTIONS[0]?.id ?? "");
   const [marketDirection, setMarketDirection] = useState<"outperform" | "underperform">("outperform");
@@ -1751,6 +1774,7 @@ export default function App() {
           <button type="button" style={tabStyle("home")} onClick={() => setActiveTab("home")}>Home</button>
           <button type="button" style={tabStyle("blackjack")} onClick={() => setActiveTab("blackjack")}>Blackjack AI benchmark</button>
           <button type="button" style={tabStyle("crop")} onClick={() => setActiveTab("crop")}>Crop prediction AI benchmark</button>
+          <button type="button" style={tabStyle("profile")} onClick={() => setActiveTab("profile")}>Profile</button>
         </nav>
         <div style={{ marginTop: 16, padding: "12px 14px", background: "#18181b", borderRadius: 8, border: "1px solid #3f3f46", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <span style={{ fontWeight: 600, color: "#e4e4e7" }}>
@@ -2650,6 +2674,74 @@ export default function App() {
 
       {activeTab === "crop" && (
         <CropBenchmarkSection API={API} onBalanceChange={fetchUserBalance} />
+      )}
+
+      {activeTab === "profile" && (
+        <div style={{ padding: "24px 0", maxWidth: 560 }}>
+          <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Your profile</h2>
+          <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
+            Track your balance, betting activity, and P/L across all benchmarks.
+          </p>
+          {profileLoading && <p style={{ color: "#71717a" }}>Loading…</p>}
+          {!profileLoading && profile && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ padding: 16, background: "#18181b", borderRadius: 12, border: "1px solid #3f3f46" }}>
+                <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 12 }}>Balance & stats</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: "0.95rem" }}>
+                  <span>Balance: <strong style={{ color: "#e4e4e7" }}>${(profile.balanceCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Daily claimed: <strong>{profile.dailyClaimedToday ? "Yes" : "No"}</strong></span>
+                  <span>Total wagered: <strong>${(profile.totalWageredCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Betting P/L: <strong style={{ color: profile.totalPnlCents >= 0 ? "#22c55e" : "#ef4444" }}>{(profile.totalPnlCents >= 0 ? "+" : "")}${(profile.totalPnlCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                </div>
+              </div>
+              <div style={{ padding: 16, background: "#18181b", borderRadius: 12, border: "1px solid #3f3f46" }}>
+                <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 12 }}>Bet history</div>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 400, overflowY: "auto", overscrollBehavior: "contain" }}>
+                  {[...profile.performanceBets, ...profile.cropNextTestBets.map((b) => ({ ...b, _type: "crop_next" as const })), ...profile.cropLongTermBets.map((b) => ({ ...b, _type: "crop_longterm" as const }))]
+                    .sort((a, b) => ((a as { created_at?: string }).created_at ?? "").localeCompare((b as { created_at?: string }).created_at ?? "") * -1)
+                    .map((b, i) => {
+                      const created = (b as { created_at?: string }).created_at;
+                      const amt = (b as { amount_cents: number }).amount_cents;
+                      const outcome = (b as { outcome: string }).outcome;
+                      const payout = (b as { payout_cents?: number | null }).payout_cents;
+                      const outcomeColor = outcome === "win" ? "#22c55e" : outcome === "loss" ? "#ef4444" : outcome === "push" ? "#a1a1aa" : "#71717a";
+                      const pnl = outcome !== "pending" && payout != null ? payout - amt : null;
+                      let label = "";
+                      if ("_type" in b && b._type === "crop_next") {
+                        label = `Crop next-test: ${(b as { model_a_id: string }).model_a_id} vs ${(b as { model_b_id: string }).model_b_id} — ${(b as { direction: string }).direction === "a_wins" ? "A wins" : "B wins"}`;
+                      } else if ("_type" in b && b._type === "crop_longterm") {
+                        label = `Crop long-term: ${(b as { model_id: string }).model_id} ${(b as { period: string }).period} — ${(b as { direction: string }).direction}`;
+                      } else {
+                        const pb = b as PerformanceBet;
+                        label = `${pb.domain} · ${pb.model_id} ${pb.period} — ${pb.direction}`;
+                      }
+                      return (
+                        <li key={(b as { id?: string }).id ?? i} style={{ marginBottom: 8, padding: "10px 12px", background: "#27272a", borderRadius: 8, border: "1px solid #3f3f46", fontSize: "0.85rem" }}>
+                          <div style={{ color: "#a1a1aa" }}>{label}</div>
+                          <div style={{ marginTop: 4, display: "flex", gap: 12, alignItems: "center" }}>
+                            <span>${(amt / 100).toFixed(2)}</span>
+                            {outcome !== "pending" && (
+                              <span style={{ color: outcomeColor, fontWeight: 600 }}>
+                                {outcome === "win" && pnl != null ? `Won $${(pnl / 100).toFixed(2)}` : outcome === "loss" ? `Lost $${(amt / 100).toFixed(2)}` : outcome === "push" ? "Refunded" : outcome}
+                              </span>
+                            )}
+                            {created && <span style={{ color: "#71717a", fontSize: "0.8rem" }}>{new Date(created).toLocaleString()}</span>}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  {profile.performanceBets.length === 0 && profile.cropNextTestBets.length === 0 && profile.cropLongTermBets.length === 0 && (
+                    <li style={{ color: "#71717a", fontSize: "0.85rem" }}>No bets yet. Place bets in Blackjack or Crop benchmarks.</li>
+                  )}
+                </ul>
+                <button type="button" onClick={fetchProfile} style={{ marginTop: 12, padding: "8px 14px", background: "#3f3f46", border: "none", borderRadius: 6, color: "#e4e4e7", cursor: "pointer", fontSize: "0.85rem" }}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          )}
+          {!profileLoading && !profile && <p style={{ color: "#71717a" }}>Could not load profile.</p>}
+        </div>
       )}
     </div>
   );

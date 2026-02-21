@@ -34,6 +34,8 @@ const env = z.object({
   HEDERA_NETWORK: z.enum(["testnet", "mainnet", "previewnet"]).default("testnet"),
   /** HCS topic id (e.g. 0.0.5678). Required to submit AI results. */
   HEDERA_TOPIC_ID: z.string().optional(),
+  /** HCS inbound topic id (e.g. 0.0.911). For user bets/profile — subscribe via mirror (HIP-991). */
+  HEDERA_INBOUND_TOPIC_ID: z.string().optional(),
 }).parse(process.env);
 
 const useSqlite = !env.DATABASE_URL || env.DATABASE_URL === "sqlite" || (typeof env.DATABASE_URL === "string" && env.DATABASE_URL.startsWith("file:"));
@@ -60,6 +62,7 @@ export const config = {
   hederaKeyType: env.HEDERA_KEY_TYPE,
   hederaNetwork: env.HEDERA_NETWORK,
   hederaTopicId: env.HEDERA_TOPIC_ID,
+  hederaInboundTopicId: env.HEDERA_INBOUND_TOPIC_ID,
 } as const;
 
 export const DAILY_BLACKJACK_DOLLARS = config.blackjackDailyCents / 100;

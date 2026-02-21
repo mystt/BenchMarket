@@ -14,6 +14,7 @@ export type PerformanceBet = {
   amount_cents: number;
   outcome: "win" | "loss" | "pending";
   payout_cents?: number | null;
+  created_at?: string;
 };
 
 /** Place a bet on AI performance (e.g. "model X will outperform in blackjack this day"). */
@@ -36,7 +37,7 @@ export async function placePerformanceBet(
 
 /** List all performance bets. */
 export async function listPerformanceBets(): Promise<PerformanceBet[]> {
-  const res = await query<PerformanceBet>(`SELECT id, domain, model_id, period, direction, amount_cents, outcome, payout_cents FROM performance_bets`);
+  const res = await query<PerformanceBet & { created_at?: string }>(`SELECT id, domain, model_id, period, direction, amount_cents, outcome, payout_cents, created_at FROM performance_bets ORDER BY created_at DESC`);
   return res.rows.map((r) => ({ ...r, payout_cents: r.payout_cents != null ? Number(r.payout_cents) : null }));
 }
 

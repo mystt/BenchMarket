@@ -10,6 +10,7 @@
     "build:frontend": "cd frontend && npm run build",
     "db:migrate": "cd backend && npm run db:migrate",
     "hcs:create-topic": "cd backend && npx tsx src/hedera/create-topic.ts",
+    "hcs:create-inbound-topic": "cd backend && npx tsx src/hedera/create-inbound-topic.ts",
     "postinstall": "npm install --prefix backend && npm install --prefix frontend"
   },
   "engines": {

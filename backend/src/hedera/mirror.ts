@@ -6,7 +6,6 @@
 import { config } from "../config.js";
 
 function getMirrorBase(): string | null {
-  if (!config.hederaTopicId) return null;
   const url = process.env.HEDERA_MIRROR_BASE_URL;
   if (url) return url.replace(/\/$/, "");
   const net = config.hederaNetwork ?? "testnet";
@@ -31,16 +30,18 @@ export type TopicMessagesResponse = {
 };
 
 /**
- * Fetch messages from the topic. Messages are base64-encoded JSON.
+ * Fetch messages from a topic. Messages are base64-encoded JSON.
  * Paginates through links.next to fetch all messages (mirror node typically caps at 100 per request).
+ * @param topicIdOverride — use this topic instead of config.hederaTopicId (e.g. inbound topic 0.0.911)
  */
 export async function fetchTopicMessages(options?: {
   limit?: number;
   order?: "asc" | "desc";
   maxMessages?: number;
+  topicIdOverride?: string;
 }): Promise<TopicMessage[]> {
+  const topicId = options?.topicIdOverride ?? config.hederaTopicId;
   const base = getMirrorBase();
-  const topicId = config.hederaTopicId;
   if (!base || !topicId) return [];
 
   const limit = Math.min(options?.limit ?? 100, 100); // mirror often caps at 100
@@ -91,4 +92,15 @@ export async function fetchTopicMessages(options?: {
     console.warn("[HCS Mirror] Fetch error:", e);
     return out;
   }
+}
+
+/** Fetch messages from the inbound topic (HEDERA_INBOUND_TOPIC_ID, e.g. 0.0.911). */
+export async function fetchInboundTopicMessages(options?: {
+  limit?: number;
+  order?: "asc" | "desc";
+  maxMessages?: number;
+}): Promise<TopicMessage[]> {
+  const topicId = config.hederaInboundTopicId;
+  if (!topicId) return [];
+  return fetchTopicMessages({ ...options, topicIdOverride: topicId });
 }

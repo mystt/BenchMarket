@@ -959,6 +959,7 @@ export default function App() {
     vsHandReasonings: [],
   });
   const [knowledgeStreaming, setKnowledgeStreaming] = useState(false);
+  const [knowledgeSendStatus, setKnowledgeSendStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
     playerCards: string[];
     playerTotal: number | null;
@@ -1528,6 +1529,20 @@ export default function App() {
       }
     }
   };
+
+  const sendToKnowledgeTopic = useCallback(async () => {
+    setKnowledgeSendStatus("sending");
+    setError("");
+    try {
+      const res = await fetch(`${API}/hedera/send-to-knowledge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: { test: true, ts: new Date().toISOString() } }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Request failed");
+      setKnowledgeSendStatus("ok");
+    } catch (e) {
+      setKnowledgeSendStatus("err");
+      setError(e instanceof Error ? e.message : "Failed to send");
+    }
+  }, [API]);
 
   const playKnowledgeHand = useCallback(async () => {
     setError("");
@@ -2791,14 +2806,29 @@ export default function App() {
         <div style={{ maxWidth: 560 }}>
           <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Knowledge Blackjack (HCS)</h2>
           <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
-            Play blackjack via the Hedera Knowledge topic (0.0.7992466). Each decision is sent as an HCS message; the knowledge processor responds on-chain. Multiple messages per hand (hit/stand loops until done).
+            Send messages to the Hedera Knowledge topic (0.0.7992466). Verify on HashScan that messages appear. Full blackjack flow below once the processor is running.
           </p>
           {apiUnreachable && (
             <p style={{ padding: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, marginBottom: 24 }}>
-              Can&apos;t reach the API. Start the backend and ensure KNOWLEDGE_INBOUND_TOPIC_ID and HEDERA_INBOUND_TOPIC_ID are set in .env.
+              Can&apos;t reach the API. Start the backend.
             </p>
           )}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
+            <button
+              onClick={sendToKnowledgeTopic}
+              disabled={knowledgeSendStatus === "sending"}
+              style={{
+                padding: "12px 24px",
+                background: knowledgeSendStatus === "sending" ? "#3f3f46" : knowledgeSendStatus === "ok" ? "#166534" : "#16a34a",
+                border: "none",
+                borderRadius: 8,
+                color: "#fff",
+                fontWeight: 600,
+                cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
+              }}
+            >
+              {knowledgeSendStatus === "sending" ? "Sending…" : knowledgeSendStatus === "ok" ? "✓ Sent" : "Send to topic"}
+            </button>
             <button
               onClick={playKnowledgeHand}
               disabled={knowledgeStreaming}

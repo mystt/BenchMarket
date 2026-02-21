@@ -14,6 +14,7 @@ import { hederaRouter } from "./api/hedera.js";
 import { startAutoPlayBlackjack } from "./jobs/autoPlayBlackjack.js";
 import { startAutoPlayCrop } from "./jobs/autoPlayCrop.js";
 import { hydrateFromHedera } from "./hedera/hydrate.js";
+import { startInboundSubscription } from "./hedera/subscribe-inbound.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === "production";
@@ -62,6 +63,9 @@ async function main() {
     console.log(`AI models loaded: ${providers.length} (${providers.map((p) => p.name).join(", ")})`);
     if (config.hederaOperatorId && config.hederaOperatorKey && config.hederaTopicId) {
       console.log(`HCS: AI results will be submitted to topic ${config.hederaTopicId}`);
+    }
+    if (config.hederaInboundTopicId) {
+      startInboundSubscription();
     }
     startAutoPlayBlackjack();
     startAutoPlayCrop();

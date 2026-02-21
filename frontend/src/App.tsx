@@ -2905,69 +2905,74 @@ export default function App() {
               <strong>Send to topic</strong> requires: <code style={{ background: "#78350f", padding: "2px 6px" }}>KNOWLEDGE_INBOUND_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_KEY</code>. Set in Render Environment or <code style={{ background: "#78350f", padding: "2px 6px" }}>.env</code>, then redeploy.
             </p>
           )}
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
-            <button
-              onClick={() => sendToKnowledgeTopic(false)}
-              disabled={knowledgeSendStatus === "sending" || knowledgeSendConfigured === false}
-              style={{
-                padding: "12px 24px",
-                background: knowledgeSendStatus === "sending" ? "#3f3f46" : knowledgeSendStatus === "ok" ? "#166534" : "#16a34a",
-                border: "none",
-                borderRadius: 8,
-                color: "#fff",
-                fontWeight: 600,
-                cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
-              }}
-            >
-              {knowledgeSendStatus === "sending" ? "Sending…" : knowledgeSendStatus === "ok" ? "✓ Sent" : "Send to topic"}
-            </button>
-            <button
-              onClick={() => sendToKnowledgeTopic(true)}
-              disabled={knowledgeSendStatus === "sending"}
-              title="Sends to HEDERA_TOPIC_ID (blackjack storage) to verify backend can submit"
-              style={{
-                padding: "12px 16px",
-                background: "#334155",
-                border: "1px solid #475569",
-                borderRadius: 8,
-                color: "#e2e8f0",
-                fontWeight: 500,
-                cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
-              }}
-            >
-              Test (storage topic)
-            </button>
-            <button
-              onClick={() => playKnowledgeHand(false)}
-              disabled={knowledgeStreaming}
-              style={{
-                padding: "12px 24px",
-                background: knowledgeStreaming ? "#3f3f46" : "#16a34a",
-                border: "none",
-                borderRadius: 8,
-                color: "#fff",
-                fontWeight: 600,
-                cursor: knowledgeStreaming ? "not-allowed" : "pointer",
-              }}
-            >
-              {knowledgeStreaming ? "Playing… (waiting for HCS)" : "Play 1 hand"}
-            </button>
-            <button
-              onClick={() => playKnowledgeHand(true)}
-              disabled={knowledgeStreaming}
-              title="Force blackjack (A+10) to verify AI bets max per reference"
-              style={{
-                padding: "12px 20px",
-                background: knowledgeStreaming ? "#3f3f46" : "#15803d",
-                border: "1px solid #166534",
-                borderRadius: 8,
-                color: "#fff",
-                fontWeight: 500,
-                cursor: knowledgeStreaming ? "not-allowed" : "pointer",
-              }}
-            >
-              Deal 21 (test)
-            </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <button
+                onClick={() => sendToKnowledgeTopic(false)}
+                disabled={knowledgeSendStatus === "sending" || knowledgeSendConfigured === false}
+                style={{
+                  padding: "12px 24px",
+                  background: knowledgeSendStatus === "sending" ? "#3f3f46" : knowledgeSendStatus === "ok" ? "#166534" : "#16a34a",
+                  border: "none",
+                  borderRadius: 8,
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
+                }}
+              >
+                {knowledgeSendStatus === "sending" ? "Sending…" : knowledgeSendStatus === "ok" ? "✓ Sent" : "Send to topic"}
+              </button>
+              <button
+                onClick={() => sendToKnowledgeTopic(true)}
+                disabled={knowledgeSendStatus === "sending"}
+                title="Sends to HEDERA_TOPIC_ID (blackjack storage) to verify backend can submit"
+                style={{
+                  padding: "12px 16px",
+                  background: "#334155",
+                  border: "1px solid #475569",
+                  borderRadius: 8,
+                  color: "#e2e8f0",
+                  fontWeight: 500,
+                  cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
+                }}
+              >
+                Test (storage topic)
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                onClick={() => playKnowledgeHand(false)}
+                disabled={knowledgeStreaming}
+                style={{
+                  padding: "12px 24px",
+                  background: knowledgeStreaming ? "#3f3f46" : "#16a34a",
+                  border: "none",
+                  borderRadius: 8,
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: knowledgeStreaming ? "not-allowed" : "pointer",
+                }}
+              >
+                {knowledgeStreaming ? "Playing… (waiting for HCS)" : "Play 1 hand"}
+              </button>
+              <button
+                onClick={() => playKnowledgeHand(true)}
+                disabled={knowledgeStreaming}
+                title="Force blackjack (A+10) to verify AI uses reference and bets max"
+                style={{
+                  padding: "12px 20px",
+                  background: knowledgeStreaming ? "#3f3f46" : "#0d9488",
+                  border: "none",
+                  borderRadius: 8,
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: knowledgeStreaming ? "not-allowed" : "pointer",
+                }}
+              >
+                Deal 21 (test)
+              </button>
+              <span style={{ color: "#78716c", fontSize: "0.85rem" }}>— Forces blackjack to test AI bets max per reference</span>
+            </div>
           </div>
           {knowledgeLastTx && (knowledgeLastTx.hashscanTx || knowledgeLastTx.hashscanTopic) && (
             <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#94a3b8" }}>

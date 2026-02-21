@@ -1534,7 +1534,7 @@ export default function App() {
     setKnowledgeSendStatus("sending");
     setError("");
     try {
-      const res = await fetch(`${API}/hedera/send-to-knowledge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: { test: true, ts: new Date().toISOString() } }) });
+      const res = await fetch(`${API}/blackjack/send-to-knowledge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: { test: true, ts: new Date().toISOString() } }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Request failed");
       setKnowledgeSendStatus("ok");

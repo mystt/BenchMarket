@@ -4,8 +4,12 @@ import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, g
 import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
+import { handleSendToKnowledge } from "./hedera.js";
 
 export const blackjackRouter = Router();
+
+/** POST /api/blackjack/send-to-knowledge — same as /api/hedera/send-to-knowledge, fallback for routing. */
+blackjackRouter.post("/send-to-knowledge", (req, res) => handleSendToKnowledge(req, res));
 
 /** Always return both models for the dropdown; actual lookup uses getAIProvider(id) when playing */
 const MODEL_OPTIONS = [

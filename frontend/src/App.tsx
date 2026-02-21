@@ -960,6 +960,7 @@ export default function App() {
   });
   const [knowledgeStreaming, setKnowledgeStreaming] = useState(false);
   const [knowledgeSendStatus, setKnowledgeSendStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
+  const [knowledgeSendConfigured, setKnowledgeSendConfigured] = useState<boolean | null>(null);
   const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
     playerCards: string[];
     playerTotal: number | null;
@@ -1114,6 +1115,14 @@ export default function App() {
     run();
     return () => clearInterval(interval);
   }, [autoPlayStatus?.enabled]);
+
+  useEffect(() => {
+    if (activeTab !== "knowledge") return;
+    fetch(`${API_BASE}/health`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => setKnowledgeSendConfigured(d?.knowledgeSendConfigured ?? false))
+      .catch(() => setKnowledgeSendConfigured(false));
+  }, [activeTab]);
 
   useEffect(() => {
     setApiUnreachable(false);
@@ -2813,10 +2822,15 @@ export default function App() {
               Can&apos;t reach the API. Start the backend.
             </p>
           )}
+          {!apiUnreachable && knowledgeSendConfigured === false && (
+            <p style={{ padding: 12, background: "#422006", color: "#fef3c7", borderRadius: 8, marginBottom: 24, fontSize: "0.9rem" }}>
+              <strong>Send to topic</strong> requires: <code style={{ background: "#78350f", padding: "2px 6px" }}>KNOWLEDGE_INBOUND_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_ID</code>, and <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_KEY</code>. Set these in Render Environment or your backend <code style={{ background: "#78350f", padding: "2px 6px" }}>.env</code>, then redeploy.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
             <button
               onClick={sendToKnowledgeTopic}
-              disabled={knowledgeSendStatus === "sending"}
+              disabled={knowledgeSendStatus === "sending" || knowledgeSendConfigured === false}
               style={{
                 padding: "12px 24px",
                 background: knowledgeSendStatus === "sending" ? "#3f3f46" : knowledgeSendStatus === "ok" ? "#166534" : "#16a34a",

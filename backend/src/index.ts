@@ -34,6 +34,8 @@ app.get("/health", (_req, res) =>
     ok: true,
     openaiConfigured: !!(config.openaiApiKey ?? process.env.OPENAI_API_KEY),
     hederaKnowledgeConfigured: !!(config.knowledgeInboundTopicId && config.hederaInboundTopicId),
+    /** Send to topic button: only needs topic + operator creds (no HEDERA_INBOUND_TOPIC_ID) */
+    knowledgeSendConfigured: !!(config.knowledgeInboundTopicId && config.hederaOperatorId && config.hederaOperatorKey),
   })
 );
 

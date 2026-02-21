@@ -1118,6 +1118,12 @@ export default function App() {
   }, [autoPlayStatus?.enabled]);
 
   useEffect(() => {
+    if (activeTab === "knowledge") {
+      refetchLeaderboard();
+    }
+  }, [activeTab, refetchLeaderboard]);
+
+  useEffect(() => {
     if (activeTab !== "knowledge") return;
     fetch(`${API_BASE}/health`)
       .then((r) => r.ok ? r.json() : null)
@@ -2944,6 +2950,83 @@ export default function App() {
             )}
           </div>
           {error && <p style={{ marginTop: 12, color: "#fca5a5", fontSize: "0.9rem" }}>{error}</p>}
+
+          <div style={{ marginTop: 32, padding: 16, background: "#18181b", borderRadius: 8, border: "1px solid #3f3f46" }}>
+            <strong style={{ fontSize: "0.9rem" }}>Hedera Knowledge P/L (same chart as 2v2)</strong>
+            <div style={{ marginTop: 12, minHeight: 200 }}>
+              {leaderboardHistory.length === 0 && leaderboard.length === 0 && <div style={{ color: "#71717a", fontSize: "0.9rem" }}>No data yet. Play hands to see P/L over time.</div>}
+              {(leaderboardHistory.length > 0 || leaderboard.length > 0) && (() => {
+                const series = leaderboardHistory.length > 0 ? leaderboardHistory : leaderboard.map((r) => ({ modelId: r.modelId, name: r.name, points: [{ handIndex: 1, cumulativePnlCents: r.pnlCents }] }));
+                const allPoints = series.flatMap((s) => s.points);
+                const maxHand = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.handIndex)));
+                const minPnl = Math.min(0, ...allPoints.map((p) => p.cumulativePnlCents));
+                const maxPnl = Math.max(0, ...allPoints.map((p) => p.cumulativePnlCents));
+                const rangePnl = maxPnl - minPnl || 1;
+                const pad = { left: 44, right: 16, top: 20, bottom: 32 };
+                const w = 280;
+                const h = 200;
+                const chartW = w - pad.left - pad.right;
+                const chartH = h - pad.top - pad.bottom;
+                const x = (hand: number) => pad.left + (hand / maxHand) * chartW;
+                const y = (cents: number) => pad.top + (1 - (cents - minPnl) / rangePnl) * chartH;
+                const colors = ["#22c55e", "#3b82f6", "#a855f7", "#f59e0b"];
+                const yTicks = (() => {
+                  const steps = [0];
+                  if (minPnl < 0) steps.push(minPnl);
+                  if (maxPnl > 0) steps.push(maxPnl);
+                  const lo = Math.min(0, minPnl);
+                  const hi = Math.max(0, maxPnl);
+                  const range = hi - lo || 1;
+                  const step = range <= 200 ? 100 : range <= 2000 ? 500 : Math.ceil(range / 4 / 100) * 100;
+                  for (let v = Math.ceil(lo / 100) * 100; v <= hi; v += step) if (!steps.includes(v)) steps.push(v);
+                  steps.sort((a, b) => a - b);
+                  return steps;
+                })();
+                const xTicks = maxHand <= 5 ? Array.from({ length: maxHand + 1 }, (_, i) => i) : [...new Set(Array.from({ length: 6 }, (_, i) => Math.round((i / 5) * maxHand)))].sort((a, b) => a - b);
+                return (
+                  <div>
+                    <svg width={w} height={h} style={{ display: "block" }} viewBox={`0 0 ${w} ${h}`}>
+                      <text x={14} y={pad.top + chartH / 2} textAnchor="middle" fill="#a1a1aa" fontSize="10" transform={`rotate(-90, 14, ${pad.top + chartH / 2})`}>P/L ($)</text>
+                      <line x1={pad.left} y1={pad.top} x2={pad.left} y2={h - pad.bottom} stroke="#71717a" strokeWidth={1} />
+                      <line x1={pad.left} y1={h - pad.bottom} x2={w - pad.right} y2={h - pad.bottom} stroke="#71717a" strokeWidth={1} />
+                      {yTicks.map((cents) => (
+                        <g key={cents}>
+                          <line x1={pad.left} y1={y(cents)} x2={pad.left - 4} y2={y(cents)} stroke="#71717a" strokeWidth={1} />
+                          <text x={pad.left - 6} y={y(cents)} textAnchor="end" dominantBaseline="middle" fill="#a1a1aa" fontSize="9">{cents === 0 ? "0" : (cents > 0 ? "+" : "") + (cents / 100).toFixed(0)}</text>
+                        </g>
+                      ))}
+                      {xTicks.map((hand) => (
+                        <g key={hand}>
+                          <line x1={x(hand)} y1={h - pad.bottom} x2={x(hand)} y2={h - pad.bottom + 4} stroke="#71717a" strokeWidth={1} />
+                          <text x={x(hand)} y={h - pad.bottom + 14} textAnchor="middle" fill="#a1a1aa" fontSize="9">{hand}</text>
+                        </g>
+                      ))}
+                      <text x={pad.left + chartW / 2} y={h - 4} textAnchor="middle" fill="#a1a1aa" fontSize="10">Hand</text>
+                      <line x1={pad.left} y1={y(0)} x2={w - pad.right} y2={y(0)} stroke="#52525b" strokeWidth={1} strokeDasharray="4 2" />
+                      {series.map((s, i) => {
+                        const pts = [{ handIndex: 0, cumulativePnlCents: 0 }, ...s.points];
+                        const d = pts.map((p) => `${x(p.handIndex)},${y(p.cumulativePnlCents)}`).join(" ");
+                        return <polyline key={s.modelId} fill="none" stroke={colors[i % colors.length]} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" points={d} />;
+                      })}
+                    </svg>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, paddingTop: 8, borderTop: "1px solid #3f3f46", fontSize: "0.8rem" }}>
+                      {series.map((s, i) => {
+                        const last = s.points[s.points.length - 1];
+                        const cents = last ? last.cumulativePnlCents : 0;
+                        return (
+                          <span key={s.modelId} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length] }} />
+                            <span style={{ color: "#e4e4e7" }}>{s.name}</span>
+                            <span style={{ fontWeight: 600, color: cents >= 0 ? "#22c55e" : "#ef4444" }}>{`${cents >= 0 ? "+" : ""}$${(cents / 100).toFixed(2)}`}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
 

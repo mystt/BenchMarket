@@ -6,42 +6,18 @@
  */
 
 import { Router } from "express";
-import { Client, PrivateKey, TopicId, TopicMessageSubmitTransaction } from "@hashgraph/sdk";
 import { hydrateFromHedera } from "../hedera/hydrate.js";
 import { fetchTopicMessages } from "../hedera/mirror.js";
+import { submitToTopic } from "../hedera/hcs.js";
 import { config } from "../config.js";
-
-function getHederaClient(): Client | null {
-  const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork } = config;
-  if (!hederaOperatorId || !hederaOperatorKey) return null;
-  try {
-    const net = hederaNetwork ?? "testnet";
-    const client =
-      net === "mainnet" ? Client.forMainnet() : net === "previewnet" ? Client.forPreviewnet() : Client.forTestnet();
-    const keyStr = hederaOperatorKey.replace(/\s/g, "").trim().replace(/^0x/i, "");
-    const key =
-      /^[0-9a-fA-F]{64}$/.test(keyStr)
-        ? (hederaKeyType === "ed25519" ? PrivateKey.fromStringED25519(keyStr) : PrivateKey.fromStringECDSA(keyStr))
-        : /^302[ce][0-9a-fA-F]+$/.test(keyStr) || (keyStr.length > 64 && /^[0-9a-fA-F]+$/.test(keyStr))
-          ? PrivateKey.fromStringDer(keyStr)
-          : PrivateKey.fromString(hederaOperatorKey);
-    client.setOperator(hederaOperatorId, key);
-    return client;
-  } catch {
-    return null;
-  }
-}
 
 export const hederaRouter = Router();
 
-/** Shared handler — submit message to KNOWLEDGE_INBOUND_TOPIC_ID. Exported for use by blackjack router. */
-export async function handleSendToKnowledge(req: { body?: unknown }, res: { status: (n: number) => { json: (o: object) => void }; json: (o: object) => void }) {
+/** POST /api/hedera/send-to-knowledge — submit to KNOWLEDGE_INBOUND_TOPIC_ID. Uses same HCS logic as blackjack storage. */
+hederaRouter.post("/send-to-knowledge", async (req, res) => {
   const topicId = config.knowledgeInboundTopicId;
-  const client = getHederaClient();
-  if (!topicId || !client) {
-    return res.status(400).json({
-      error: "Set KNOWLEDGE_INBOUND_TOPIC_ID, HEDERA_OPERATOR_ID, and HEDERA_OPERATOR_KEY",
-    });
+  if (!topicId) {
+    return res.status(400).json({ error: "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
   }
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -49,20 +25,15 @@ export async function handleSendToKnowledge(req: { body?: unknown }, res: { stat
       typeof body.message === "string"
         ? body.message
         : JSON.stringify(body.message ?? { test: true, ts: new Date().toISOString() });
-    const tx = new TopicMessageSubmitTransaction()
-      .setTopicId(TopicId.fromString(topicId))
-      .setMessage(msg);
-    await tx.execute(client);
-    console.log("[Hedera] Sent message to knowledge topic", topicId);
+    await submitToTopic(topicId, msg);
+    console.log("[Hedera] Sent to knowledge topic", topicId);
     res.json({ ok: true, topicId, message: "Message submitted. Check HashScan for topic " + topicId });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("POST send-to-knowledge:", e);
-    res.status(500).json({ error: msg });
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("POST /api/hedera/send-to-knowledge:", e);
+    res.status(500).json({ error: errMsg });
   }
-}
-
-hederaRouter.post("/send-to-knowledge", (req, res) => handleSendToKnowledge(req, res));
+});
 
 /** GET /api/hedera/sync — re-hydrate from HCS mirror node. Rebuilds blackjack hands and crop state for charts. */
 hederaRouter.get("/sync", async (_req, res) => {

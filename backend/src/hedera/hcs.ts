@@ -21,6 +21,7 @@ export type { CropSnapshotPayload } from "./schema.js";
 
 let client: Client | null = null;
 
+/** Client for submitAiResult — requires HEDERA_TOPIC_ID (blackjack/crop storage). */
 function getClient(): Client | null {
   if (client != null) return client;
   const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork, hederaTopicId } = config;
@@ -46,6 +47,49 @@ function getClient(): Client | null {
     console.warn("[HCS] Failed to create Hedera client:", e);
     return null;
   }
+}
+
+let submitClient: Client | null = null;
+
+/** Client for submitToTopic — only needs HEDERA_OPERATOR_ID + KEY (no topic). Same logic as blackjack storage. */
+function getClientForSubmit(): Client | null {
+  if (submitClient != null) return submitClient;
+  const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork } = config;
+  if (!hederaOperatorId || !hederaOperatorKey) return null;
+  try {
+    const net = hederaNetwork ?? "testnet";
+    submitClient =
+      net === "mainnet"
+        ? Client.forMainnet()
+        : net === "previewnet"
+          ? Client.forPreviewnet()
+          : Client.forTestnet();
+    const keyStr = hederaOperatorKey.replace(/\s/g, "").trim().replace(/^0x/i, "");
+    const key =
+      /^[0-9a-fA-F]{64}$/.test(keyStr)
+        ? (hederaKeyType === "ed25519" ? PrivateKey.fromStringED25519(keyStr) : PrivateKey.fromStringECDSA(keyStr))
+        : /^302[ce][0-9a-fA-F]+$/.test(keyStr) || (keyStr.length > 64 && /^[0-9a-fA-F]+$/.test(keyStr))
+          ? PrivateKey.fromStringDer(keyStr)
+          : PrivateKey.fromString(hederaOperatorKey);
+    submitClient.setOperator(hederaOperatorId, key);
+    return submitClient;
+  } catch (e) {
+    console.warn("[HCS] Failed to create submit client:", e);
+    return null;
+  }
+}
+
+/**
+ * Submit a raw message to any Hedera topic. Uses same client setup as blackjack storage.
+ * Throws on error so the API can return 500.
+ */
+export async function submitToTopic(topicId: string, message: string): Promise<void> {
+  const c = getClientForSubmit();
+  if (!c) throw new Error("Set HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY");
+  const tx = new TopicMessageSubmitTransaction()
+    .setTopicId(TopicId.fromString(topicId))
+    .setMessage(message);
+  await tx.execute(c);
 }
 
 /** Payload to submit (same as HcsPayload from schema). */

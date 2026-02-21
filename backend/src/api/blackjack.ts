@@ -4,12 +4,31 @@ import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, g
 import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
-import { handleSendToKnowledge } from "./hedera.js";
+import { submitToTopic } from "../hedera/hcs.js";
 
 export const blackjackRouter = Router();
 
-/** POST /api/blackjack/send-to-knowledge — same as /api/hedera/send-to-knowledge, fallback for routing. */
-blackjackRouter.post("/send-to-knowledge", (req, res) => handleSendToKnowledge(req, res));
+/** POST /api/blackjack/send-to-knowledge — submit message to KNOWLEDGE_INBOUND_TOPIC_ID. Uses same HCS logic as blackjack storage. */
+blackjackRouter.post("/send-to-knowledge", async (req, res) => {
+  const topicId = config.knowledgeInboundTopicId;
+  if (!topicId) {
+    return res.status(400).json({ error: "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
+  }
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const msg =
+      typeof body.message === "string"
+        ? body.message
+        : JSON.stringify(body.message ?? { test: true, ts: new Date().toISOString() });
+    await submitToTopic(topicId, msg);
+    console.log("[HCS] Sent to knowledge topic", topicId);
+    res.json({ ok: true, topicId, message: "Message submitted. Check HashScan for topic " + topicId });
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("POST /api/blackjack/send-to-knowledge:", e);
+    res.status(500).json({ error: errMsg });
+  }
+});
 
 /** Always return both models for the dropdown; actual lookup uses getAIProvider(id) when playing */
 const MODEL_OPTIONS = [

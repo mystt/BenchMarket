@@ -10,7 +10,31 @@ import {
   resolveHand,
   type Card,
 } from "./engine.js";
-import { buildBlackjackPrompt, buildBetPrompt } from "./prompt.js";
+import {
+  buildBlackjackPrompt,
+  buildBlackjackPromptWithRules,
+  buildBetPrompt,
+  buildBetPromptWithRules,
+} from "./prompt.js";
+
+function blackjackPromptFor(provider: AIProvider, playerCards: Card[], dealerUpcard: Card): string {
+  return provider.id === "hedera-knowledge"
+    ? buildBlackjackPromptWithRules(playerCards, dealerUpcard)
+    : buildBlackjackPrompt(playerCards, dealerUpcard);
+}
+
+function betPromptFor(
+  provider: AIProvider,
+  balanceCents: number,
+  minBetCents: number,
+  maxBetCents: number,
+  playerCards?: Card[],
+  dealerUpcard?: Card
+): string {
+  return provider.id === "hedera-knowledge"
+    ? buildBetPromptWithRules(balanceCents, minBetCents, maxBetCents, playerCards, dealerUpcard)
+    : buildBetPrompt(balanceCents, minBetCents, maxBetCents, playerCards, dealerUpcard);
+}
 import { submitAiResult } from "../../hedera/hcs.js";
 import { appendBlackjackHand } from "../../hedera/blackjack-hand-store.js";
 
@@ -102,7 +126,10 @@ export async function getAIBetCents(modelId: string): Promise<number> {
   const balance = await getOrCreateDailyBankroll(modelId, "blackjack", date);
   const handMaxBet = Math.min(balance, MAX_BET_CENTS);
   if (balance < MIN_BET_CENTS) throw new Error("Insufficient bankroll");
-  const betPrompt = buildBetPrompt(balance, MIN_BET_CENTS, handMaxBet);
+  const betPrompt =
+    provider.id === "hedera-knowledge"
+      ? buildBetPromptWithRules(balance, MIN_BET_CENTS, handMaxBet)
+      : buildBetPrompt(balance, MIN_BET_CENTS, handMaxBet);
   const betResponse = await provider.ask(betPrompt);
   const textToParse = betResponse.raw ?? [betResponse.decision, betResponse.reasoning].filter(Boolean).join(" ");
   const raw = parseBetFromResponse(textToParse);
@@ -137,9 +164,13 @@ export async function playHand(
   const playerCards: Card[] = [deck.pop()!, deck.pop()!];
   const dealerUpcard = deck.pop()!;
   const dealerDown = deck.pop()!;
+  const handId = randomUUID();
 
-  const prompt = buildBlackjackPrompt(playerCards, dealerUpcard);
-  const { decision, reasoning } = await provider.ask(prompt);
+  const prompt = blackjackPromptFor(provider, playerCards, dealerUpcard);
+  const ctx = provider.id === "hedera-knowledge"
+    ? { handId, step: 1, playerCards: [...playerCards], dealerUpcard, betCents }
+    : undefined;
+  const { decision, reasoning } = await provider.ask(prompt, ctx);
 
   const normalizedDecision = decision.toLowerCase().startsWith("hit") ? "hit" : "stand";
 
@@ -168,7 +199,6 @@ export async function playHand(
   await deductBet(modelId, date, betCents);
   await creditResult(modelId, date, pnlCents);
 
-  const handId = randomUUID();
   await query(
     `INSERT INTO blackjack_hands (id, model_id, date, bet_cents, player_cards, dealer_upcard, decision, reasoning, outcome, pnl_cents)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -252,6 +282,7 @@ export async function playHandsStream(
       break;
     }
     onEvent({ type: "hand_start", handIndex: handIndex + 1, totalHands });
+    const handId = randomUUID();
 
     // Deal first so the AI can see their cards before betting
     const deck = createDeck();
@@ -261,7 +292,7 @@ export async function playHandsStream(
     onEvent({ type: "deal", playerCards: [...playerCards], playerTotal: handValue(playerCards), dealerUpcard });
 
     // AI decides how much to bet after seeing the initial deal
-    const betPrompt = buildBetPrompt(balance, minBet, handMaxBet, playerCards, dealerUpcard);
+    const betPrompt = betPromptFor(provider, balance, minBet, handMaxBet, playerCards, dealerUpcard);
     const betResponse = await provider.ask(betPrompt);
     const textToParse = betResponse.raw ?? [betResponse.decision, betResponse.reasoning].filter(Boolean).join(" ");
     const rawBetCents = parseBetFromResponse(textToParse);
@@ -273,15 +304,20 @@ export async function playHandsStream(
     let lastDecision = "stand";
     let lastReasoning: string | null = null;
     let reasoningAccum = "";
+    let step = 0;
 
     // Player turn: hit or stand (multiple hits until stand or bust)
     while (true) {
-      const prompt = buildBlackjackPrompt(playerCards, dealerUpcard);
+      step++;
+      const prompt = blackjackPromptFor(provider, playerCards, dealerUpcard);
+      const ctx = provider.id === "hedera-knowledge"
+        ? { handId, step, playerCards: [...playerCards], dealerUpcard, betCents }
+        : undefined;
       if (askStream) {
         lastReasoning = null;
         reasoningAccum = "";
         let result: { decision: string; reasoning?: string };
-        const gen = askStream(prompt);
+        const gen = askStream(prompt, ctx);
         let next = await gen.next();
         while (!next.done) {
           const chunk = next.value as string;
@@ -293,7 +329,7 @@ export async function playHandsStream(
         lastDecision = result.decision.toLowerCase().startsWith("hit") ? "hit" : "stand";
         lastReasoning = result.reasoning ?? (reasoningAccum.trim() || null);
       } else {
-        const res = await provider.ask(prompt);
+        const res = await provider.ask(prompt, ctx);
         lastDecision = res.decision.toLowerCase().startsWith("hit") ? "hit" : "stand";
         lastReasoning = res.reasoning ?? null;
       }
@@ -331,7 +367,6 @@ export async function playHandsStream(
     );
     const balanceCentsAfter = Number(balanceRes.rows[0]?.balance_cents ?? balance);
 
-    const handId = randomUUID();
     await query(
       `INSERT INTO blackjack_hands (id, model_id, date, bet_cents, player_cards, dealer_upcard, decision, reasoning, outcome, pnl_cents)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -442,10 +477,10 @@ export async function playHandsStreamVs(
       dealerUpcard,
     });
 
-    const askBet = async (modelId: string, provider: { ask: (p: string) => Promise<{ reasoning?: string; raw?: string; decision: string }> }, balance: number, playerCards: Card[], up: Card): Promise<{ betCents: number; reasoning: string | null }> => {
+    const askBet = async (modelId: string, prov: AIProvider, balance: number, playerCards: Card[], up: Card): Promise<{ betCents: number; reasoning: string | null }> => {
       const handMaxBet = Math.min(balance, effectiveMaxBet);
-      const betPrompt = buildBetPrompt(balance, minBet, handMaxBet, playerCards, up);
-      const res = await provider.ask(betPrompt);
+      const betPrompt = betPromptFor(prov, balance, minBet, handMaxBet, playerCards, up);
+      const res = await prov.ask(betPrompt);
       const text = res.raw ?? [res.decision, res.reasoning].filter(Boolean).join(" ");
       const raw = parseBetFromResponse(text);
       const betCents = raw != null ? Math.max(minBet, Math.min(handMaxBet, raw)) : minBet;
@@ -457,6 +492,7 @@ export async function playHandsStreamVs(
     const betB = await askBet(modelIdB, providerB, balanceB, playerBCards, dealerUpcard);
     onEvent({ type: "bet", player: "b", betCents: betB.betCents, reasoning: betB.reasoning });
 
+    const handId = randomUUID();
     const playTurn = async (
       player: "a" | "b",
       provider: AIProvider,
@@ -467,11 +503,16 @@ export async function playHandsStreamVs(
       let lastDecision = "stand";
       let lastReasoning: string | null = null;
       const askStream = provider.askStream?.bind(provider);
+      let step = 0;
       while (true) {
-        const prompt = buildBlackjackPrompt(cards, dealerUpcard);
+        step++;
+        const prompt = blackjackPromptFor(provider, cards, dealerUpcard);
+        const ctx = provider.id === "hedera-knowledge"
+          ? { handId, step, playerCards: [...cards], dealerUpcard }
+          : undefined;
         if (askStream) {
           let reasoningAccum = "";
-          const gen = askStream(prompt);
+          const gen = askStream(prompt, ctx);
           let next = await gen.next();
           while (!next.done) {
             const chunk = next.value as string;
@@ -483,7 +524,7 @@ export async function playHandsStreamVs(
           lastDecision = result.decision.toLowerCase().startsWith("hit") ? "hit" : "stand";
           lastReasoning = result.reasoning ?? (reasoningAccum.trim() || null);
         } else {
-          const res = await provider.ask(prompt);
+          const res = await provider.ask(prompt, ctx);
           lastDecision = res.decision.toLowerCase().startsWith("hit") ? "hit" : "stand";
           lastReasoning = res.reasoning ?? null;
         }

@@ -16,6 +16,10 @@ import { startAutoPlayCrop } from "./jobs/autoPlayCrop.js";
 import { hydrateFromHedera } from "./hedera/hydrate.js";
 import { startInboundSubscription } from "./hedera/subscribe-inbound.js";
 import { invokeBenchmarkAnalyst, parseAnalystQuestion } from "./prompts/benchmark-analyst.js";
+import {
+  resolveKnowledgeResponse,
+  parseKnowledgeResponseRequestId,
+} from "./hedera/knowledge-agent.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === "production";
@@ -67,6 +71,13 @@ async function main() {
     }
     if (config.hederaInboundTopicId) {
       startInboundSubscription(async (msg) => {
+        // Knowledge topic responses (requestId) — resolve pending ask() calls
+        const requestId = parseKnowledgeResponseRequestId(msg.contents);
+        if (requestId) {
+          resolveKnowledgeResponse(requestId, msg.contents);
+          return;
+        }
+        // Benchmark analyst triggers
         const q = parseAnalystQuestion(msg.contents);
         if (q) {
           console.log("[HCS Inbound] Triggering benchmark analyst:", q.slice(0, 60) + (q.length > 60 ? "…" : ""));

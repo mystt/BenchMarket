@@ -36,6 +36,8 @@ const env = z.object({
   HEDERA_TOPIC_ID: z.string().optional(),
   /** HCS inbound topic id (e.g. 0.0.911). For user bets/profile — subscribe via mirror (HIP-991). */
   HEDERA_INBOUND_TOPIC_ID: z.string().optional(),
+  /** HCS topic where external knowledge agent subscribes. We send requests (e.g. blackjack) here. */
+  KNOWLEDGE_INBOUND_TOPIC_ID: z.string().optional(),
 }).parse(process.env);
 
 const useSqlite = !env.DATABASE_URL || env.DATABASE_URL === "sqlite" || (typeof env.DATABASE_URL === "string" && env.DATABASE_URL.startsWith("file:"));
@@ -63,6 +65,7 @@ export const config = {
   hederaNetwork: env.HEDERA_NETWORK,
   hederaTopicId: env.HEDERA_TOPIC_ID,
   hederaInboundTopicId: env.HEDERA_INBOUND_TOPIC_ID,
+  knowledgeInboundTopicId: env.KNOWLEDGE_INBOUND_TOPIC_ID,
 } as const;
 
 export const DAILY_BLACKJACK_DOLLARS = config.blackjackDailyCents / 100;

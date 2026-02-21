@@ -12,10 +12,19 @@ export interface AIResponse {
   raw?: string;
 }
 
+/** Optional context for HCS/knowledge providers (multi-message blackjack hands). */
+export type AIAskContext = {
+  handId?: string;
+  step?: number;
+  playerCards?: string[];
+  dealerUpcard?: string;
+  betCents?: number;
+};
+
 export interface AIProvider {
   id: AIModelId;
   name: string;
-  ask(prompt: string): Promise<AIResponse>;
+  ask(prompt: string, context?: AIAskContext): Promise<AIResponse>;
   /** Stream content chunks (e.g. reasoning) as they arrive. Caller parses final DECISION when done. */
-  askStream?(prompt: string): AsyncGenerator<string, AIResponse>;
+  askStream?(prompt: string, context?: AIAskContext): AsyncGenerator<string, AIResponse>;
 }

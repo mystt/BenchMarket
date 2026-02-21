@@ -54,7 +54,7 @@ type StreamEvVs =
   | { type: "error"; message: string }
   | { type: "done" };
 
-type TabId = "home" | "blackjack" | "crop" | "profile";
+type TabId = "home" | "blackjack" | "knowledge" | "crop" | "profile";
 type AIModel = { id: string; name: string };
 
 /** Always show both models in dropdowns; same OpenAI key works for both */
@@ -958,6 +958,17 @@ export default function App() {
     vsHandLog: [],
     vsHandReasonings: [],
   });
+  const [knowledgeStreaming, setKnowledgeStreaming] = useState(false);
+  const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
+    playerCards: string[];
+    playerTotal: number | null;
+    dealerCards: (string | null)[];
+    dealerTotal: number | null;
+    lastDecision: string | null;
+    outcome: string | null;
+    pnlCents: number | null;
+    reasoning: string;
+  }>({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "" });
   const [streamState, setStreamState] = useState<{
     handIndex: number;
     totalHands: number;
@@ -1517,6 +1528,69 @@ export default function App() {
     }
   };
 
+  const playKnowledgeHand = useCallback(async () => {
+    setError("");
+    setKnowledgeStreaming(true);
+    setKnowledgeStreamState({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "" });
+    try {
+      const res = await fetch(`${API}/blackjack/play-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId: "hedera-knowledge", hands: 1 }),
+      });
+      if (!res.ok || !res.body) throw new Error((await res.text()) || "Stream failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as StreamEv;
+            setKnowledgeStreamState((prev) => {
+              const next = { ...prev };
+              if (ev.type === "deal") {
+                next.playerCards = [...ev.playerCards];
+                next.playerTotal = ev.playerTotal;
+                next.dealerCards = [ev.dealerUpcard, null];
+                next.dealerTotal = null;
+              } else if (ev.type === "decision") {
+                next.lastDecision = ev.decision;
+                if (ev.reasoning) next.reasoning = ev.reasoning;
+              } else if (ev.type === "player_card") {
+                next.playerCards = [...ev.playerCards];
+                next.playerTotal = ev.playerTotal;
+              } else if (ev.type === "dealer_reveal") {
+                next.dealerCards = ev.dealerCards.map((c) => c);
+                next.dealerTotal = ev.dealerTotal;
+              } else if (ev.type === "dealer_draw") {
+                next.dealerCards = [...ev.dealerCards];
+                next.dealerTotal = ev.dealerTotal;
+              } else if (ev.type === "outcome") {
+                next.outcome = ev.outcome;
+                next.pnlCents = ev.pnlCents;
+              } else if (ev.type === "reasoning_chunk") {
+                next.reasoning = (next.reasoning || "") + ev.text;
+              }
+              return next;
+            });
+          } catch (_) {}
+        }
+      }
+      refetchLeaderboard();
+      fetch(`${API}/blackjack/daily/hedera-knowledge`).then((r) => (r.ok ? r.json() : null)).then((d) => (d ? setBalance(d.balanceCents / 100) : setBalance(null))).catch(() => setBalance(null));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Play failed");
+    } finally {
+      setKnowledgeStreaming(false);
+    }
+  }, [API, refetchLeaderboard]);
+
   const runVsStreamWithModels = useCallback(async (modelAId: string, modelBId: string, hands: number) => {
     setStreamingVs(true);
     setVsState({
@@ -1773,6 +1847,7 @@ export default function App() {
         <nav style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" style={tabStyle("home")} onClick={() => setActiveTab("home")}>Home</button>
           <button type="button" style={tabStyle("blackjack")} onClick={() => setActiveTab("blackjack")}>Blackjack AI benchmark</button>
+          <button type="button" style={tabStyle("knowledge")} onClick={() => setActiveTab("knowledge")}>Knowledge Blackjack (HCS)</button>
           <button type="button" style={tabStyle("crop")} onClick={() => setActiveTab("crop")}>Crop prediction AI benchmark</button>
           <button type="button" style={tabStyle("profile")} onClick={() => setActiveTab("profile")}>Profile</button>
         </nav>
@@ -1835,6 +1910,23 @@ export default function App() {
             >
               <strong style={{ display: "block", marginBottom: 4 }}>Blackjack AI benchmark</strong>
               <span style={{ color: "#a1a1aa", fontSize: "0.9rem" }}>$100k/day per AI. Play hands and see P/L. Single model or head-to-head VS.</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("knowledge")}
+              style={{
+                padding: 20,
+                background: "#18181b",
+                border: "1px solid #3f3f46",
+                borderRadius: 12,
+                color: "#e4e4e7",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "1rem",
+              }}
+            >
+              <strong style={{ display: "block", marginBottom: 4 }}>Knowledge Blackjack (HCS)</strong>
+              <span style={{ color: "#a1a1aa", fontSize: "0.9rem" }}>Play via Hedera topic. Multi-message HCS flow: send prompt → wait for response → repeat until stand/bust.</span>
             </button>
             <button
               type="button"
@@ -2670,6 +2762,84 @@ export default function App() {
         </ul>
       </div>
     </div>
+      )}
+
+      {activeTab === "knowledge" && (
+        <div style={{ maxWidth: 560 }}>
+          <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Knowledge Blackjack (HCS)</h2>
+          <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
+            Play blackjack via the Hedera Knowledge topic (0.0.7992466). Each decision is sent as an HCS message; the knowledge processor responds on-chain. Multiple messages per hand (hit/stand loops until done).
+          </p>
+          {apiUnreachable && (
+            <p style={{ padding: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, marginBottom: 24 }}>
+              Can&apos;t reach the API. Start the backend and ensure KNOWLEDGE_INBOUND_TOPIC_ID and HEDERA_INBOUND_TOPIC_ID are set in .env.
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
+            <button
+              onClick={playKnowledgeHand}
+              disabled={knowledgeStreaming}
+              style={{
+                padding: "12px 24px",
+                background: knowledgeStreaming ? "#3f3f46" : "#16a34a",
+                border: "none",
+                borderRadius: 8,
+                color: "#fff",
+                fontWeight: 600,
+                cursor: knowledgeStreaming ? "not-allowed" : "pointer",
+              }}
+            >
+              {knowledgeStreaming ? "Playing… (waiting for HCS)" : "Play 1 hand"}
+            </button>
+          </div>
+          <div
+            style={{
+              padding: 20,
+              background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)",
+              borderRadius: 12,
+              border: "1px solid #334155",
+              minHeight: 180,
+            }}
+          >
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ color: "#94a3b8", fontSize: "0.75rem", marginBottom: 6 }}>Hedera Knowledge (player)</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {knowledgeStreamState.playerCards.length === 0 && (
+                  <span style={{ color: "#64748b" }}>{knowledgeStreaming ? "Dealing / waiting for HCS…" : "—"}</span>
+                )}
+                {knowledgeStreamState.playerCards.map((c, i) => (
+                  <span key={i} style={{ padding: "10px 14px", background: "#f8fafc", color: "#0f172a", borderRadius: 8, fontWeight: 700 }}>{formatCard(c)}</span>
+                ))}
+                {knowledgeStreamState.playerTotal != null && (
+                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>→ {knowledgeStreamState.playerTotal}</span>
+                )}
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ color: "#94a3b8", fontSize: "0.75rem", marginBottom: 6 }}>Dealer</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {knowledgeStreamState.dealerCards.length === 0 && <span style={{ color: "#64748b" }}>—</span>}
+                {knowledgeStreamState.dealerCards.map((c, i) => (
+                  <span key={i} style={{ padding: "10px 14px", background: c ? "#f8fafc" : "#475569", color: c ? "#0f172a" : "#94a3b8", borderRadius: 8, fontWeight: 700 }}>{c ? formatCard(c) : "?"}</span>
+                ))}
+                {knowledgeStreamState.dealerTotal != null && <span style={{ color: "#e2e8f0", fontWeight: 600 }}>→ {knowledgeStreamState.dealerTotal}</span>}
+              </div>
+            </div>
+            {knowledgeStreamState.lastDecision && (
+              <p style={{ marginBottom: 4, color: "#cbd5e1" }}><strong>Decision:</strong> {knowledgeStreamState.lastDecision}</p>
+            )}
+            {knowledgeStreamState.reasoning && (
+              <p style={{ marginBottom: 4, fontSize: "0.9rem", color: "#94a3b8" }}>{knowledgeStreamState.reasoning}</p>
+            )}
+            {knowledgeStreamState.outcome && (
+              <p style={{ marginBottom: 0, color: knowledgeStreamState.outcome === "win" ? "#86efac" : knowledgeStreamState.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
+                <strong>Outcome:</strong> {knowledgeStreamState.outcome.toUpperCase()}
+                {knowledgeStreamState.pnlCents != null && ` — ${(knowledgeStreamState.pnlCents ?? 0) >= 0 ? "+" : ""}$${formatDollars(knowledgeStreamState.pnlCents)}`}
+              </p>
+            )}
+          </div>
+          {error && <p style={{ marginTop: 12, color: "#fca5a5", fontSize: "0.9rem" }}>{error}</p>}
+        </div>
       )}
 
       {activeTab === "crop" && (

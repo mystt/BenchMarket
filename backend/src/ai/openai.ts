@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
-import type { AIProvider, AIResponse } from "./types.js";
+import type { AIProvider, AIResponse, AIAskContext } from "./types.js";
 
 const apiKey = (config.openaiApiKey ?? process.env.OPENAI_API_KEY ?? "").trim();
 
@@ -37,7 +37,7 @@ function createOpenAIProvider(id: string, name: string, model: string): AIProvid
   return {
     id,
     name,
-    async ask(prompt: string): Promise<AIResponse> {
+    async ask(prompt: string, _context?: AIAskContext): Promise<AIResponse> {
       const completion = await c.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
@@ -48,7 +48,7 @@ function createOpenAIProvider(id: string, name: string, model: string): AIProvid
       const parsed = parseStructuredResponse(content);
       return { ...parsed, raw: content };
     },
-    async *askStream(prompt: string): AsyncGenerator<string, AIResponse> {
+    async *askStream(prompt: string, _context?: AIAskContext): AsyncGenerator<string, AIResponse> {
       const stream = await c.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],

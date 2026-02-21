@@ -11,6 +11,7 @@ export const blackjackRouter = Router();
 const MODEL_OPTIONS = [
   { id: "openai-gpt-4o-mini", name: "GPT-4o Mini" },
   { id: "openai-gpt-4o", name: "GPT-4o" },
+  { id: "hedera-knowledge", name: "Hedera Knowledge" },
 ];
 
 blackjackRouter.get("/models", (_req, res) => {

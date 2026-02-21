@@ -13,20 +13,14 @@ import { config } from "../config.js";
 
 export const hederaRouter = Router();
 
-/** POST /api/hedera/send-to-knowledge — submit to KNOWLEDGE_INBOUND_TOPIC_ID. Uses same HCS logic as blackjack storage. */
+/** POST /api/hedera/send-to-knowledge — submit "hello world" to KNOWLEDGE_INBOUND_TOPIC_ID. Uses exact same HCS path as blackjack storage. */
 hederaRouter.post("/send-to-knowledge", async (req, res) => {
   const topicId = config.knowledgeInboundTopicId;
   if (!topicId) {
     return res.status(400).json({ error: "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
   }
   try {
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const msg =
-      typeof body.message === "string"
-        ? body.message
-        : JSON.stringify(body.message ?? { test: true, ts: new Date().toISOString() });
-    await submitToTopic(topicId, msg);
-    console.log("[Hedera] Sent to knowledge topic", topicId);
+    await submitToTopic(topicId, "hello world");
     res.json({ ok: true, topicId, message: "Message submitted. Check HashScan for topic " + topicId });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);

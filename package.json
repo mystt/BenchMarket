@@ -11,6 +11,8 @@
     "db:migrate": "cd backend && npm run db:migrate",
     "hcs:create-topic": "cd backend && npx tsx src/hedera/create-topic.ts",
     "hcs:create-inbound-topic": "cd backend && npx tsx src/hedera/create-inbound-topic.ts",
+    "hcs:test-inbound": "cd backend && npx tsx scripts/test-inbound-subscription.ts",
+    "hcs:ask": "cd backend && npx tsx scripts/ask-benchmark.ts",
     "postinstall": "npm install --prefix backend && npm install --prefix frontend"
   },
   "engines": {

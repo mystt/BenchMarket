@@ -15,6 +15,7 @@ import { startAutoPlayBlackjack } from "./jobs/autoPlayBlackjack.js";
 import { startAutoPlayCrop } from "./jobs/autoPlayCrop.js";
 import { hydrateFromHedera } from "./hedera/hydrate.js";
 import { startInboundSubscription } from "./hedera/subscribe-inbound.js";
+import { invokeBenchmarkAnalyst, parseAnalystQuestion } from "./prompts/benchmark-analyst.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === "production";
@@ -65,7 +66,16 @@ async function main() {
       console.log(`HCS: AI results will be submitted to topic ${config.hederaTopicId}`);
     }
     if (config.hederaInboundTopicId) {
-      startInboundSubscription();
+      startInboundSubscription(async (msg) => {
+        const q = parseAnalystQuestion(msg.contents);
+        if (q) {
+          console.log("[HCS Inbound] Triggering benchmark analyst:", q.slice(0, 60) + (q.length > 60 ? "…" : ""));
+          const analysis = await invokeBenchmarkAnalyst(q);
+          console.log("[Benchmark Analyst]", analysis.slice(0, 300) + (analysis.length > 300 ? "…" : ""));
+        } else {
+          console.log("[HCS Inbound] Message:", msg.sequenceNumber, msg.contents.slice(0, 100) + (msg.contents.length > 100 ? "…" : ""));
+        }
+      });
     }
     startAutoPlayBlackjack();
     startAutoPlayCrop();

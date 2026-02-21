@@ -108,3 +108,19 @@ export function getOpenAIProviderById(id: string): AIProvider | null {
 
 export const openAIProvider = openAIProviders[0] ?? null;
 export const openAIProvider4o = openAIProviders[1] ?? null;
+
+/** Generic chat completion (system + user). Used by benchmark analyst. */
+export async function chatCompletion(
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  options?: { model?: string; maxTokens?: number }
+): Promise<string> {
+  const c = getClient();
+  if (!c) throw new Error("OpenAI client not configured");
+  const completion = await c.chat.completions.create({
+    model: options?.model ?? "gpt-4o-mini",
+    messages,
+    temperature: 0.3,
+    max_tokens: options?.maxTokens ?? 2000,
+  });
+  return completion.choices[0]?.message?.content?.trim() ?? "";
+}

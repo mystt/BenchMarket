@@ -54,9 +54,6 @@ hederaRouter.get("/sync", async (_req, res) => {
 
 /** GET /api/hedera/bj-hand-store — blackjack hand counts per model (in-memory store, for debugging). */
 hederaRouter.get("/bj-hand-store", async (_req, res) => {
-  if (!config.hederaTopicId) {
-    return res.status(400).json({ error: "HEDERA_TOPIC_ID not configured" });
-  }
   try {
     const { getBlackjackHandModelIds, getBlackjackHands } = await import("../hedera/blackjack-hand-store.js");
     const modelIds = getBlackjackHandModelIds();

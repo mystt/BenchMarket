@@ -33,9 +33,10 @@ export function appendBlackjackHand(modelId: string, entry: Omit<BlackjackHandEn
   });
   handsByModel.set(modelId, list);
   // Update totalHands for all entries in this model's list
-  list.forEach((h, i) => {
+  list.forEach((h) => {
     h.totalHands = total;
   });
+  console.log(`[bj-hand-store] appendBlackjackHand: modelId=${modelId}, totalHands=${total}, decision=${entry.decision ?? "n/a"}, outcome=${entry.outcome ?? "n/a"}, hasReasoning=${!!entry.reasoning}`);
 }
 
 /** Replace store with data from HCS. In-memory hands (from appendBlackjackHand) take precedence when they have more complete data. */

@@ -4,6 +4,8 @@ import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, g
 import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
+import { getBlackjackHands } from "../hedera/blackjack-hand-store.js";
+import { config } from "../config.js";
 import { submitToKnowledgeTopic } from "../hedera/knowledge-agent.js";
 import { submitToTopic } from "../hedera/hcs.js";
 
@@ -59,8 +61,19 @@ blackjackRouter.get("/hand-history", async (req, res) => {
     const dateParam = String(req.query.date ?? "").trim().toLowerCase();
     const date = dateParam === "all" || dateParam === "" ? "all" : String(dateParam).slice(0, 10);
     if (!modelId) return res.status(400).json({ error: "modelId required" });
+    const dateFilter = date === "all" || !date ? null : String(date).slice(0, 10);
+    const inMemoryBefore = getBlackjackHands(modelId, dateFilter).length;
     const hands = await fetchBlackjackHandHistory(modelId, date);
-    res.json({ modelId, date: date === "all" ? "all" : date, hands });
+    const payload: Record<string, unknown> = { modelId, date: date === "all" ? "all" : date, hands };
+    if (modelId.toLowerCase() === "hedera-knowledge") {
+      payload.debug = {
+        inMemoryBefore,
+        handsReturned: hands.length,
+        hederaTopicIdConfigured: !!config.hederaTopicId,
+        source: inMemoryBefore > 0 ? "memory" : (config.hederaTopicId ? "hcs_or_empty" : "none_no_topic"),
+      };
+    }
+    res.json(payload);
   } catch (e) {
     console.error("GET /blackjack/hand-history error:", e);
     res.status(500).json({ error: String(e instanceof Error ? e.message : e) });

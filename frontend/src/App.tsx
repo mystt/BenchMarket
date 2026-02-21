@@ -962,6 +962,7 @@ export default function App() {
   const [knowledgeSendStatus, setKnowledgeSendStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [knowledgeSendConfigured, setKnowledgeSendConfigured] = useState<boolean | null>(null);
   const [knowledgeHandHistory, setKnowledgeHandHistory] = useState<HandReasoningEntry[]>([]);
+  const [knowledgeHandHistoryStatus, setKnowledgeHandHistoryStatus] = useState<{ loading?: boolean; error?: string; rawCount?: number; backendStoreCount?: number; debug?: { inMemoryBefore?: number; handsReturned?: number; hederaTopicIdConfigured?: boolean; source?: string }; bjStoreError?: string }>({});
   const [knowledgeLastTx, setKnowledgeLastTx] = useState<{ hashscanTx?: string; hashscanTopic?: string; topicId?: string } | null>(null);
   const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
     playerCards: string[];
@@ -1119,10 +1120,26 @@ export default function App() {
   }, [autoPlayStatus?.enabled]);
 
   const refetchKnowledgeHandHistory = useCallback(() => {
+    setKnowledgeHandHistoryStatus({ loading: true, error: undefined });
     fetch(`${API}/blackjack/hand-history?modelId=hedera-knowledge&date=all`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+      .then(async (r) => {
+        const text = await r.text();
+        let d: { hands?: unknown[]; modelId?: string } | null = null;
+        try {
+          d = text ? JSON.parse(text) : null;
+        } catch {
+          setKnowledgeHandHistoryStatus({ loading: false, error: `API returned invalid JSON (${r.status})`, rawCount: undefined });
+          setKnowledgeHandHistory([]);
+          return;
+        }
+        if (!r.ok) {
+          const err = (d as { error?: string })?.error ?? `HTTP ${r.status}`;
+          setKnowledgeHandHistoryStatus({ loading: false, error: err, rawCount: undefined });
+          setKnowledgeHandHistory([]);
+          return;
+        }
         const hands = d?.hands ?? [];
+        const debug = (d as { debug?: { inMemoryBefore?: number; handsReturned?: number; hederaTopicIdConfigured?: boolean; source?: string } })?.debug;
         setKnowledgeHandHistory(
           hands.map((h: { handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; decision?: string | null; reasoning?: string | null; outcome?: string | null; pnlCents?: number | null }) => ({
             handIndex: h.handIndex,
@@ -1140,8 +1157,28 @@ export default function App() {
             reasoningText: h.reasoning ?? "",
           }))
         );
+        let backendStoreCount: number | undefined;
+        let bjStoreError: string | undefined;
+        if (hands.length === 0) {
+          try {
+            const storeRes = await fetch(`${API}/hedera/bj-hand-store`);
+            if (!storeRes.ok) {
+              const errData = await storeRes.json().catch(() => ({}));
+              bjStoreError = (errData?.error as string) ?? `HTTP ${storeRes.status}`;
+            }
+            const storeData = storeRes.ok ? await storeRes.json() : null;
+            backendStoreCount = storeData?.byModel?.["hedera-knowledge"] ?? 0;
+          } catch (e) {
+            bjStoreError = e instanceof Error ? e.message : String(e);
+          }
+        }
+        setKnowledgeHandHistoryStatus({ loading: false, rawCount: hands.length, backendStoreCount, debug, bjStoreError });
       })
-      .catch(() => setKnowledgeHandHistory([]));
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setKnowledgeHandHistoryStatus({ loading: false, error: `Fetch failed: ${msg}`, rawCount: undefined });
+        setKnowledgeHandHistory([]);
+      });
   }, [API]);
 
   useEffect(() => {
@@ -2981,11 +3018,46 @@ export default function App() {
           {error && <p style={{ marginTop: 12, color: "#fca5a5", fontSize: "0.9rem" }}>{error}</p>}
 
           <div style={{ marginTop: 16, padding: 16, background: "#1c1917", borderRadius: 10, border: "1px solid #44403c" }}>
-            <div style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: 4 }}>Decision history</div>
-            <p style={{ fontSize: "0.8rem", color: "#78716c", marginBottom: 12 }}>Cards, reasoning, and outcome per hand. Same data as Blackjack tab when Hedera Knowledge is selected.</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: 4 }}>Decision history</div>
+                <p style={{ fontSize: "0.8rem", color: "#78716c", margin: 0 }}>Cards, reasoning, and outcome per hand. Same data as Blackjack tab when Hedera Knowledge is selected.</p>
+              </div>
+              <button type="button" onClick={refetchKnowledgeHandHistory} disabled={knowledgeHandHistoryStatus.loading} style={{ padding: "6px 12px", background: "#44403c", border: "none", borderRadius: 6, color: "#e7e5e4", cursor: knowledgeHandHistoryStatus.loading ? "not-allowed" : "pointer", fontSize: "0.8rem" }}>
+                {knowledgeHandHistoryStatus.loading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+            {knowledgeHandHistoryStatus.error && (
+              <div style={{ padding: 12, marginBottom: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, fontSize: "0.85rem" }}>
+                <strong>Hand history error:</strong> {knowledgeHandHistoryStatus.error}
+              </div>
+            )}
+            {knowledgeHandHistoryStatus.rawCount === 0 && !knowledgeHandHistoryStatus.loading && !knowledgeHandHistoryStatus.error && (
+              <div style={{ padding: 12, marginBottom: 12, background: "#422006", color: "#fef3c7", borderRadius: 8, fontSize: "0.85rem" }}>
+                <strong>API returned 0 hands.</strong>
+                {knowledgeHandHistoryStatus.backendStoreCount != null && (
+                  <span> Backend in-memory store: <code style={{ background: "#78350f", padding: "1px 4px" }}>hedera-knowledge</code> has {knowledgeHandHistoryStatus.backendStoreCount} hand(s).</span>
+                )}
+                {knowledgeHandHistoryStatus.backendStoreCount == null && (
+                  <span> Hands are stored in backend memory when you play. Possible causes: backend was restarted (memory cleared), or you haven&apos;t played from this session.</span>
+                )}
+                {knowledgeHandHistoryStatus.bjStoreError && (
+                  <div style={{ marginTop: 8, color: "#fca5a5" }}>bj-hand-store error: {knowledgeHandHistoryStatus.bjStoreError}</div>
+                )}
+                {knowledgeHandHistoryStatus.debug && (
+                  <div style={{ marginTop: 8, fontFamily: "monospace", fontSize: "0.75rem", opacity: 0.9 }}>
+                    debug: inMemoryBefore={knowledgeHandHistoryStatus.debug.inMemoryBefore ?? "?"}, handsReturned={knowledgeHandHistoryStatus.debug.handsReturned ?? "?"}, hederaTopicIdConfigured={String(knowledgeHandHistoryStatus.debug.hederaTopicIdConfigured ?? "?")}, source={knowledgeHandHistoryStatus.debug.source ?? "?"}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ maxHeight: 320, overflowY: "auto", overscrollBehavior: "contain" }}>
-              {knowledgeHandHistory.length === 0 && !knowledgeStreamState.outcome && <div style={{ color: "#71717a", fontSize: "0.9rem" }}>No hands yet. Play to see decision reasoning.</div>}
-              {knowledgeStreamState.outcome && (() => {
+              {knowledgeHandHistory.length === 0 && !(knowledgeStreamState.lastDecision || knowledgeStreamState.reasoning || knowledgeStreamState.outcome) && !knowledgeHandHistoryStatus.loading && (
+                <div style={{ color: "#71717a", fontSize: "0.9rem" }}>
+                  {knowledgeHandHistoryStatus.rawCount === 0 && !knowledgeHandHistoryStatus.error ? "Play a hand, then click Refresh. If it still shows 0, the backend may not be persisting to the hand-history store." : "No hands yet. Play to see decision reasoning."}
+                </div>
+              )}
+              {(knowledgeStreamState.lastDecision || knowledgeStreamState.reasoning || knowledgeStreamState.outcome) && (() => {
                 const cur = knowledgeStreamState;
                 return (
                   <div style={{ padding: 12, marginBottom: 8, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
@@ -3008,6 +3080,9 @@ export default function App() {
                       <div style={{ marginTop: 8, fontSize: "0.8rem", color: cur.outcome === "win" ? "#86efac" : cur.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
                         {cur.outcome?.toUpperCase()} {cur.pnlCents != null && `(${cur.pnlCents >= 0 ? "+" : ""}$${formatDollars(cur.pnlCents)})`}
                       </div>
+                    )}
+                    {knowledgeHandHistory.length === 0 && cur.outcome && (
+                      <div style={{ marginTop: 8, fontSize: "0.7rem", color: "#a8a29e" }}>From current stream. If Refresh still shows 0 hands, backend may not be persisting — check server logs for [bj-hand-store] appendBlackjackHand.</div>
                     )}
                   </div>
                 );

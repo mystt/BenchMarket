@@ -3,6 +3,8 @@
  * Subscribes to KNOWLEDGE_INBOUND_TOPIC_ID; for each blackjack request, calls OpenAI and posts
  * the response to the replyTo topic (HEDERA_INBOUND_TOPIC_ID).
  *
+ * Uses blackjack-reference.md as context so the LLM has training/reference data.
+ *
  * Run: npm run knowledge-processor
  * Or: cd backend && npx tsx scripts/knowledge-processor.ts
  *
@@ -12,6 +14,11 @@
  * Keep this running (locally or deployed) for "Play 1 hand" to work.
  */
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   Client,
   PrivateKey,
@@ -22,6 +29,18 @@ import {
 } from "@hashgraph/sdk";
 import OpenAI from "openai";
 import { config } from "../src/config.js";
+
+/** Load blackjack reference data to prepend to prompts. */
+function loadBlackjackReference(): string {
+  const refPath = path.join(__dirname, "..", "src", "domains", "blackjack", "blackjack-reference.md");
+  try {
+    const content = fs.readFileSync(refPath, "utf-8");
+    return content.trim();
+  } catch {
+    console.warn("[Processor] Could not load blackjack-reference.md, using prompt only");
+    return "";
+  }
+}
 
 function getClient(): Client {
   const { hederaOperatorId, hederaOperatorKey, hederaKeyType, hederaNetwork } = config;
@@ -79,10 +98,15 @@ async function processMessage(client: Client, contents: string): Promise<void> {
     return;
   }
 
-  console.log("[Processor] Blackjack request", requestId.slice(0, 8) + "...", "→ calling OpenAI");
+  const reference = loadBlackjackReference();
+  const fullPrompt = reference
+    ? `Use this reference when playing blackjack:\n\n${reference}\n\n---\n\n${prompt}`
+    : prompt;
+
+  console.log("[Processor] Blackjack request", requestId.slice(0, 8) + "...", "→ calling OpenAI", reference ? "(with reference)" : "");
   let response: string;
   try {
-    response = await callOpenAI(prompt);
+    response = await callOpenAI(fullPrompt);
   } catch (e) {
     console.error("[Processor] OpenAI error:", e);
     response = "DECISION: stand\nREASONING: Error calling LLM.";

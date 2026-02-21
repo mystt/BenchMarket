@@ -2980,11 +2980,38 @@ export default function App() {
           </div>
           {error && <p style={{ marginTop: 12, color: "#fca5a5", fontSize: "0.9rem" }}>{error}</p>}
 
-          <div style={{ marginTop: 24, padding: 16, background: "#1c1917", borderRadius: 10, border: "1px solid #44403c" }}>
-            <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>Past hands & reasoning</div>
-            <p style={{ fontSize: "0.8rem", color: "#78716c", marginBottom: 12 }}>Also visible in Blackjack tab when Hedera Knowledge is selected.</p>
-            <div style={{ maxHeight: 260, overflowY: "auto", overscrollBehavior: "contain" }}>
-              {knowledgeHandHistory.length === 0 && <div style={{ color: "#71717a", fontSize: "0.9rem" }}>No hands yet. Play to see reasoning.</div>}
+          <div style={{ marginTop: 16, padding: 16, background: "#1c1917", borderRadius: 10, border: "1px solid #44403c" }}>
+            <div style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: 4 }}>Decision history</div>
+            <p style={{ fontSize: "0.8rem", color: "#78716c", marginBottom: 12 }}>Cards, reasoning, and outcome per hand. Same data as Blackjack tab when Hedera Knowledge is selected.</p>
+            <div style={{ maxHeight: 320, overflowY: "auto", overscrollBehavior: "contain" }}>
+              {knowledgeHandHistory.length === 0 && !knowledgeStreamState.outcome && <div style={{ color: "#71717a", fontSize: "0.9rem" }}>No hands yet. Play to see decision reasoning.</div>}
+              {knowledgeStreamState.outcome && (() => {
+                const cur = knowledgeStreamState;
+                return (
+                  <div style={{ padding: 12, marginBottom: 8, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
+                    <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#fde047", marginBottom: 6 }}>Latest hand</div>
+                    {cur.playerCards.length > 0 && (
+                      <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                        {cur.playerCards.map((c, i) => (
+                          <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
+                        ))}
+                        {cur.dealerUpcard && <><span style={{ color: "#78716c", marginLeft: 4 }}>vs</span><span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(cur.dealerUpcard)} dealer</span></>}
+                      </div>
+                    )}
+                    {cur.betCents != null && <div style={{ marginBottom: 6, fontSize: "0.8rem" }}><span style={{ color: "#fde047" }}>Bet: ${formatDollars(cur.betCents)}</span></div>}
+                    {cur.reasoning ? (
+                      <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
+                        <span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Reasoning: </span>{cur.reasoning}
+                      </div>
+                    ) : cur.lastDecision && <div style={{ fontSize: "0.8rem", color: "#a8a29e" }}>Decision: {cur.lastDecision}</div>}
+                    {(cur.outcome || cur.pnlCents != null) && (
+                      <div style={{ marginTop: 8, fontSize: "0.8rem", color: cur.outcome === "win" ? "#86efac" : cur.outcome === "loss" ? "#fca5a5" : "#fde047" }}>
+                        {cur.outcome?.toUpperCase()} {cur.pnlCents != null && `(${cur.pnlCents >= 0 ? "+" : ""}$${formatDollars(cur.pnlCents)})`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {knowledgeHandHistory.map((entry, idx) => (
                 <div key={idx} style={{ padding: 12, marginBottom: 8, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>

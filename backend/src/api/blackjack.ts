@@ -5,7 +5,6 @@ import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
 import { getBlackjackHands } from "../hedera/blackjack-hand-store.js";
-import { config } from "../config.js";
 import { submitToKnowledgeTopic } from "../hedera/knowledge-agent.js";
 import { submitToTopic } from "../hedera/hcs.js";
 

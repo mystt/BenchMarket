@@ -2815,7 +2815,7 @@ export default function App() {
         <div style={{ maxWidth: 560 }}>
           <h2 style={{ fontSize: "1.25rem", marginBottom: 8 }}>Knowledge Blackjack (HCS)</h2>
           <p style={{ color: "#a1a1aa", marginBottom: 24, lineHeight: 1.6 }}>
-            Send messages to the Hedera Knowledge topic (0.0.7992466). Verify on HashScan that messages appear. Full blackjack flow below once the processor is running.
+            Send messages to the Hedera Knowledge topic. Verify on HashScan. For &quot;Play 1 hand&quot;, run <code style={{ background: "#1e293b", padding: "2px 6px" }}>npm run knowledge-processor</code> in a separate terminal — it subscribes to the topic, calls OpenAI, and posts replies. Keep it running.
           </p>
           {apiUnreachable && (
             <p style={{ padding: 12, background: "#7f1d1d", color: "#fecaca", borderRadius: 8, marginBottom: 24 }}>

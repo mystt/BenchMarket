@@ -9,7 +9,8 @@
     "dev:run": "tsx src/index.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "hcs:create-topic": "tsx src/hedera/create-topic.ts",
-    "hcs:create-inbound-topic": "tsx src/hedera/create-inbound-topic.ts"
+    "hcs:create-inbound-topic": "tsx src/hedera/create-inbound-topic.ts",
+    "knowledge-processor": "tsx scripts/knowledge-processor.ts"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.38.0",

@@ -132,6 +132,13 @@ blackjackRouter.post("/play-stream", async (req, res) => {
   if (!modelId) {
     return res.status(400).json({ error: "modelId required" });
   }
+  if (modelId.toLowerCase() === "hedera-knowledge") {
+    if (!config.knowledgeInboundTopicId || !config.hederaInboundTopicId) {
+      return res.status(400).json({
+        error: "Hedera Knowledge not configured. Set KNOWLEDGE_INBOUND_TOPIC_ID and HEDERA_INBOUND_TOPIC_ID in .env.",
+      });
+    }
+  }
   const effectiveMaxBet = maxBetCents > 0 ? maxBetCents : config.blackjackMaxBetCents;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");

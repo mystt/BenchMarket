@@ -968,7 +968,8 @@ export default function App() {
     outcome: string | null;
     pnlCents: number | null;
     reasoning: string;
-  }>({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "" });
+    betCents: number | null;
+  }>({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "", betCents: null });
   const [streamState, setStreamState] = useState<{
     handIndex: number;
     totalHands: number;
@@ -1531,14 +1532,25 @@ export default function App() {
   const playKnowledgeHand = useCallback(async () => {
     setError("");
     setKnowledgeStreaming(true);
-    setKnowledgeStreamState({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "" });
+    setKnowledgeStreamState({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "", betCents: null });
     try {
       const res = await fetch(`${API}/blackjack/play-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId: "hedera-knowledge", hands: 1 }),
       });
-      if (!res.ok || !res.body) throw new Error((await res.text()) || "Stream failed");
+      if (!res.ok) {
+        const errText = await res.text();
+        let errMsg = "Request failed";
+        try {
+          const j = JSON.parse(errText) as { error?: string };
+          if (j?.error) errMsg = j.error;
+        } catch {
+          if (errText) errMsg = errText.slice(0, 300);
+        }
+        throw new Error(errMsg);
+      }
+      if (!res.body) throw new Error("No response stream");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -1552,6 +1564,10 @@ export default function App() {
           if (!line.startsWith("data: ")) continue;
           try {
             const ev = JSON.parse(line.slice(6)) as StreamEv;
+            if (ev.type === "error") {
+              setError(ev.message);
+              break;
+            }
             setKnowledgeStreamState((prev) => {
               const next = { ...prev };
               if (ev.type === "deal") {
@@ -1559,6 +1575,8 @@ export default function App() {
                 next.playerTotal = ev.playerTotal;
                 next.dealerCards = [ev.dealerUpcard, null];
                 next.dealerTotal = null;
+              } else if (ev.type === "bet") {
+                next.betCents = ev.betCents;
               } else if (ev.type === "decision") {
                 next.lastDecision = ev.decision;
                 if (ev.reasoning) next.reasoning = ev.reasoning;
@@ -1585,7 +1603,12 @@ export default function App() {
       refetchLeaderboard();
       fetch(`${API}/blackjack/daily/hedera-knowledge`).then((r) => (r.ok ? r.json() : null)).then((d) => (d ? setBalance(d.balanceCents / 100) : setBalance(null))).catch(() => setBalance(null));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Play failed");
+      const msg = e instanceof Error ? e.message : String(e);
+      const friendly =
+        msg.includes("Failed to fetch") || msg.includes("NetworkError")
+          ? "Can't reach the API. Start the backend and ensure KNOWLEDGE_INBOUND_TOPIC_ID and HEDERA_INBOUND_TOPIC_ID are set in .env."
+          : msg;
+      setError(friendly);
     } finally {
       setKnowledgeStreaming(false);
     }
@@ -2801,6 +2824,11 @@ export default function App() {
               minHeight: 180,
             }}
           >
+            {knowledgeStreamState.betCents != null && (
+              <p style={{ marginBottom: 12, color: "#94a3b8", fontSize: "0.9rem" }}>
+                <strong>Bet:</strong> {formatDollars(knowledgeStreamState.betCents)}
+              </p>
+            )}
             <div style={{ marginBottom: 16 }}>
               <div style={{ color: "#94a3b8", fontSize: "0.75rem", marginBottom: 6 }}>Hedera Knowledge (player)</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

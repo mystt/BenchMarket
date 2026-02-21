@@ -55,6 +55,8 @@ export function buildBetPromptWithRules(
     const dealerStr = formatCardForPrompt(dealerUpcard);
     return `THIS IS A BLACKJACK REQUEST. You must respond by playing blackjack (choosing your bet).
 
+You know your hand before betting, so you have an advantage: you can adjust your bet based on your hand strength and the dealer's upcard.
+
 You have been dealt: ${playerStr} (total ${playerTotal}). Dealer shows: ${dealerStr}.
 Your balance: $${balanceDollars}. Min bet $${minDollars}, max bet $${maxDollars}.
 
@@ -106,6 +108,7 @@ Rules:
 - Dealer: Must hit until 17 or higher, then stand. You only see the dealer's upcard; the other is hidden.
 - Your choices: HIT (take another card) or STAND (keep your hand).
 - If you go over 21, you bust and lose immediately.
+- You knew your hand before betting, so you had an advantage when choosing your bet amount.
 
 Your hand: ${playerStr} (total ${playerTotal})
 Dealer shows: ${dealerStr}
@@ -129,6 +132,8 @@ export function buildBlackjackHitResultPrompt(
   const newStr = formatCardForPrompt(newCard);
 
   return `THIS IS A BLACKJACK REQUEST. You must respond by playing blackjack.
+
+(You knew your hand before betting, so you had an advantage when choosing your bet amount.)
 
 You chose HIT. You drew ${newStr}.
 

@@ -403,6 +403,7 @@ export async function playHandsStream(
       playerCards: [...playerCards],
       dealerUpcard,
       decision: lastDecision,
+      reasoning: lastReasoning,
       outcome,
       pnlCents,
     });
@@ -607,6 +608,7 @@ export async function playHandsStreamVs(
       dealerCards: dealerCards.map(String),
       dealerTotal: handValue(dealerCards),
       decision: resultA.lastDecision,
+      reasoning: resultA.lastReasoning,
       outcome: outcomeA,
       pnlCents: pnlA,
     });
@@ -618,6 +620,7 @@ export async function playHandsStreamVs(
       dealerCards: dealerCards.map(String),
       dealerTotal: handValue(dealerCards),
       decision: resultB.lastDecision,
+      reasoning: resultB.lastReasoning,
       outcome: outcomeB,
       pnlCents: pnlB,
     });

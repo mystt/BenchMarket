@@ -14,6 +14,7 @@ export type BlackjackHandEntry = {
   dealerCards?: string[];
   dealerTotal?: number | null;
   decision: string | null;
+  reasoning?: string | null;
   outcome: string | null;
   pnlCents: number | null;
 };

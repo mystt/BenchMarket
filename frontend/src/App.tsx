@@ -961,6 +961,7 @@ export default function App() {
   const [knowledgeStreaming, setKnowledgeStreaming] = useState(false);
   const [knowledgeSendStatus, setKnowledgeSendStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [knowledgeSendConfigured, setKnowledgeSendConfigured] = useState<boolean | null>(null);
+  const [knowledgeHandHistory, setKnowledgeHandHistory] = useState<HandReasoningEntry[]>([]);
   const [knowledgeLastTx, setKnowledgeLastTx] = useState<{ hashscanTx?: string; hashscanTopic?: string; topicId?: string } | null>(null);
   const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
     playerCards: string[];
@@ -1117,11 +1118,38 @@ export default function App() {
     return () => clearInterval(interval);
   }, [autoPlayStatus?.enabled]);
 
+  const refetchKnowledgeHandHistory = useCallback(() => {
+    fetch(`${API}/blackjack/hand-history?modelId=hedera-knowledge&date=all`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const hands = d?.hands ?? [];
+        setKnowledgeHandHistory(
+          hands.map((h: { handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; decision?: string | null; reasoning?: string | null; outcome?: string | null; pnlCents?: number | null }) => ({
+            handIndex: h.handIndex,
+            totalHands: h.totalHands,
+            betCents: h.betCents ?? null,
+            betReasoning: null,
+            playerCards: h.playerCards ?? [],
+            playerTotal: null,
+            dealerUpcard: h.dealerUpcard ?? null,
+            dealerCards: [],
+            dealerTotal: null,
+            decision: h.decision ?? null,
+            outcome: h.outcome ?? null,
+            pnlCents: h.pnlCents ?? null,
+            reasoningText: h.reasoning ?? "",
+          }))
+        );
+      })
+      .catch(() => setKnowledgeHandHistory([]));
+  }, [API]);
+
   useEffect(() => {
     if (activeTab === "knowledge") {
       refetchLeaderboard();
+      refetchKnowledgeHandHistory();
     }
-  }, [activeTab, refetchLeaderboard]);
+  }, [activeTab, refetchLeaderboard, refetchKnowledgeHandHistory]);
 
   useEffect(() => {
     if (activeTab !== "knowledge") return;
@@ -1182,7 +1210,7 @@ export default function App() {
       .then((d) => {
         const hands = d?.hands ?? [];
         setPersistedHandHistory(
-          hands.map((h: { handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; decision?: string | null; outcome?: string | null; pnlCents?: number | null }) => ({
+          hands.map((h: { handIndex: number; totalHands: number; betCents?: number | null; playerCards?: string[]; dealerUpcard?: string | null; decision?: string | null; reasoning?: string | null; outcome?: string | null; pnlCents?: number | null }) => ({
             handIndex: h.handIndex,
             totalHands: h.totalHands,
             betCents: h.betCents ?? null,
@@ -1195,7 +1223,7 @@ export default function App() {
             decision: h.decision ?? null,
             outcome: h.outcome ?? null,
             pnlCents: h.pnlCents ?? null,
-            reasoningText: "",
+            reasoningText: h.reasoning ?? "",
           }))
         );
       })
@@ -1637,6 +1665,7 @@ export default function App() {
         }
       }
       refetchLeaderboard();
+      refetchKnowledgeHandHistory();
       fetch(`${API}/blackjack/daily/hedera-knowledge`).then((r) => (r.ok ? r.json() : null)).then((d) => (d ? setBalance(d.balanceCents / 100) : setBalance(null))).catch(() => setBalance(null));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1648,7 +1677,7 @@ export default function App() {
     } finally {
       setKnowledgeStreaming(false);
     }
-  }, [API, refetchLeaderboard]);
+  }, [API, refetchLeaderboard, refetchKnowledgeHandHistory]);
 
   const runVsStreamWithModels = useCallback(async (modelAId: string, modelBId: string, hands: number) => {
     setStreamingVs(true);
@@ -2950,6 +2979,44 @@ export default function App() {
             )}
           </div>
           {error && <p style={{ marginTop: 12, color: "#fca5a5", fontSize: "0.9rem" }}>{error}</p>}
+
+          <div style={{ marginTop: 24, padding: 16, background: "#1c1917", borderRadius: 10, border: "1px solid #44403c" }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 10 }}>Past hands & reasoning</div>
+            <p style={{ fontSize: "0.8rem", color: "#78716c", marginBottom: 12 }}>Also visible in Blackjack tab when Hedera Knowledge is selected.</p>
+            <div style={{ maxHeight: 260, overflowY: "auto", overscrollBehavior: "contain" }}>
+              {knowledgeHandHistory.length === 0 && <div style={{ color: "#71717a", fontSize: "0.9rem" }}>No hands yet. Play to see reasoning.</div>}
+              {knowledgeHandHistory.map((entry, idx) => (
+                <div key={idx} style={{ padding: 12, marginBottom: 8, background: "#292524", borderRadius: 8, border: "1px solid #44403c" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#d6d3d1", marginBottom: 6 }}>Hand {entry.handIndex} of {entry.totalHands}</div>
+                  {(entry.playerCards.length > 0 || entry.dealerUpcard) && (
+                    <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                      {entry.playerCards.map((c, i) => (
+                        <span key={i} style={{ padding: "4px 8px", background: "#fafaf9", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(c)}</span>
+                      ))}
+                      {entry.dealerUpcard && (
+                        <>
+                          <span style={{ color: "#78716c", marginLeft: 4 }}>vs</span>
+                          <span style={{ padding: "4px 8px", background: "#fef3c7", color: "#1c1917", borderRadius: 4, fontWeight: 700, fontSize: "0.85rem" }}>{formatCard(entry.dealerUpcard)} dealer</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {entry.betCents != null && <div style={{ marginBottom: 6, fontSize: "0.8rem" }}><span style={{ color: "#fde047" }}>Bet: ${formatDollars(entry.betCents)}</span></div>}
+                  {entry.reasoningText ? (
+                    <div style={{ fontSize: "0.88rem", lineHeight: 1.5, color: "#e7e5e4", whiteSpace: "pre-wrap" }}>
+                      <span style={{ color: "#a8a29e", fontSize: "0.75rem" }}>Reasoning: </span>{entry.reasoningText}
+                    </div>
+                  ) : entry.decision && <div style={{ fontSize: "0.8rem", color: "#a8a29e" }}>Decision: {entry.decision}</div>}
+                  {(entry.outcome || entry.pnlCents != null) && (
+                    <div style={{ marginTop: 8, fontSize: "0.8rem", color: "#a8a29e" }}>
+                      {entry.outcome && <span style={{ color: entry.outcome === "win" ? "#86efac" : entry.outcome === "loss" ? "#fca5a5" : "#fde047" }}>{entry.outcome.toUpperCase()}</span>}
+                      {entry.pnlCents != null && <span style={{ marginLeft: 8 }}>{entry.pnlCents >= 0 ? "+" : ""}$${formatDollars(entry.pnlCents)}</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div style={{ marginTop: 32, padding: 16, background: "#18181b", borderRadius: 8, border: "1px solid #3f3f46" }}>
             <strong style={{ fontSize: "0.9rem" }}>Hedera Knowledge P/L (same chart as 2v2)</strong>

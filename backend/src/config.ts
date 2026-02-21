@@ -5,9 +5,13 @@ import { z } from "zod";
 
 // Load .env: repo root, backend dir, then cwd (for Render)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: join(__dirname, "..", "..", ".env") });
+const repoRoot = join(__dirname, "..", "..");
+loadEnv({ path: join(repoRoot, ".env") });
 loadEnv({ path: join(__dirname, "..", ".env") });
 loadEnv({ path: join(process.cwd(), ".env") });
+// When running from backend/, also load parent .env (common with npm run dev)
+const parentEnv = join(process.cwd(), "..", ".env");
+if (parentEnv !== join(repoRoot, ".env")) loadEnv({ path: parentEnv });
 
 const env = z.object({
   PORT: z.coerce.number().default(4000),

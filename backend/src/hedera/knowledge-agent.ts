@@ -129,7 +129,7 @@ export async function askKnowledge(prompt: string, meta?: KnowledgeRequestMeta):
       .setMessage(msg)
       .execute(c)
       .then(() => {
-        console.log("[Knowledge] Sent request", requestId.slice(0, 8) + "...");
+        console.log("[Knowledge] Sent request", requestId.slice(0, 8) + "...", "to topic", topicId);
       })
       .catch((err) => {
         if (pending.delete(requestId)) {

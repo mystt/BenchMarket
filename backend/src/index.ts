@@ -33,6 +33,7 @@ app.get("/health", (_req, res) =>
   res.json({
     ok: true,
     openaiConfigured: !!(config.openaiApiKey ?? process.env.OPENAI_API_KEY),
+    hederaKnowledgeConfigured: !!(config.knowledgeInboundTopicId && config.hederaInboundTopicId),
   })
 );
 
@@ -69,6 +70,8 @@ async function main() {
     if (config.hederaOperatorId && config.hederaOperatorKey && config.hederaTopicId) {
       console.log(`HCS: AI results will be submitted to topic ${config.hederaTopicId}`);
     }
+    const knowledgeOk = !!(config.knowledgeInboundTopicId && config.hederaInboundTopicId);
+    console.log(`Hedera Knowledge: ${knowledgeOk ? "configured" : "NOT configured (set KNOWLEDGE_INBOUND_TOPIC_ID and HEDERA_INBOUND_TOPIC_ID)"}`);
     if (config.hederaInboundTopicId) {
       startInboundSubscription(async (msg) => {
         // Knowledge topic responses (requestId) — resolve pending ask() calls

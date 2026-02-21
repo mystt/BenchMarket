@@ -172,6 +172,7 @@ blackjackRouter.post("/play-stream", async (req, res) => {
   const modelId = String(body.modelId ?? "").trim();
   const hands = Math.min(100, Math.max(1, Math.round(Number(body.hands ?? 1))));
   const maxBetCents = Math.round(Number(body.maxBetCents ?? 0));
+  const forcedHand = String(body.forcedHand ?? "").trim().toLowerCase();
   if (!modelId) {
     return res.status(400).json({ error: "modelId required" });
   }
@@ -183,6 +184,7 @@ blackjackRouter.post("/play-stream", async (req, res) => {
     }
   }
   const effectiveMaxBet = maxBetCents > 0 ? maxBetCents : config.blackjackMaxBetCents;
+  const forcedDeal21 = forcedHand === "21" && modelId.toLowerCase() === "hedera-knowledge";
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -191,7 +193,7 @@ blackjackRouter.post("/play-stream", async (req, res) => {
     res.write(`data: ${JSON.stringify(ev)}\n\n`);
   }
   try {
-    await playHandsStream(modelId, effectiveMaxBet, hands, send);
+    await playHandsStream(modelId, effectiveMaxBet, hands, send, forcedDeal21 ? { forcedDeal21: true } : undefined);
   } catch (e) {
     send({ type: "error", message: e instanceof Error ? e.message : String(e) });
   } finally {

@@ -1630,7 +1630,7 @@ export default function App() {
     }
   }, [API]);
 
-  const playKnowledgeHand = useCallback(async () => {
+  const playKnowledgeHand = useCallback(async (forced21 = false) => {
     setError("");
     setKnowledgeStreaming(true);
     setKnowledgeStreamState({ playerCards: [], playerTotal: null, dealerCards: [], dealerTotal: null, lastDecision: null, outcome: null, pnlCents: null, reasoning: "", betCents: null });
@@ -1638,7 +1638,7 @@ export default function App() {
       const res = await fetch(`${API}/blackjack/play-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId: "hedera-knowledge", hands: 1 }),
+        body: JSON.stringify({ modelId: "hedera-knowledge", hands: 1, ...(forced21 && { forcedHand: "21" }) }),
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -2938,7 +2938,7 @@ export default function App() {
               Test (storage topic)
             </button>
             <button
-              onClick={playKnowledgeHand}
+              onClick={() => playKnowledgeHand(false)}
               disabled={knowledgeStreaming}
               style={{
                 padding: "12px 24px",
@@ -2951,6 +2951,22 @@ export default function App() {
               }}
             >
               {knowledgeStreaming ? "Playing… (waiting for HCS)" : "Play 1 hand"}
+            </button>
+            <button
+              onClick={() => playKnowledgeHand(true)}
+              disabled={knowledgeStreaming}
+              title="Force blackjack (A+10) to verify AI bets max per reference"
+              style={{
+                padding: "12px 20px",
+                background: knowledgeStreaming ? "#3f3f46" : "#15803d",
+                border: "1px solid #166534",
+                borderRadius: 8,
+                color: "#fff",
+                fontWeight: 500,
+                cursor: knowledgeStreaming ? "not-allowed" : "pointer",
+              }}
+            >
+              Deal 21 (test)
             </button>
           </div>
           {knowledgeLastTx && (knowledgeLastTx.hashscanTx || knowledgeLastTx.hashscanTopic) && (

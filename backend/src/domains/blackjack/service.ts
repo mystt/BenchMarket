@@ -57,6 +57,27 @@ function today(): DateString {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Create a forced blackjack (21) deal for testing: player gets A+10, dealer 6 + other. */
+function createForced21Deal(): {
+  deck: Card[];
+  playerCards: [Card, Card];
+  dealerUpcard: Card;
+  dealerDown: Card;
+} {
+  const deck = createDeck();
+  const ace = deck.find((c) => c.startsWith("A"))!;
+  const ten = deck.find((c) => ["10", "J", "Q", "K"].includes(c.slice(0, -1)))!;
+  const six = deck.find((c) => c.startsWith("6"))!;
+  const other = deck.find((c) => c !== ace && c !== ten && c !== six)!;
+  const removed = new Set([ace, ten, six, other]);
+  return {
+    deck: deck.filter((c) => !removed.has(c)),
+    playerCards: [ace, ten] as [Card, Card],
+    dealerUpcard: six,
+    dealerDown: other,
+  };
+}
+
 /** Ensure AI model exists in ai_models (for FK). */
 export async function ensureAIModel(modelId: string, name: string): Promise<void> {
   await query(
@@ -251,6 +272,11 @@ export type StreamEvent =
   | { type: "error"; message: string }
   | { type: "done" };
 
+export type PlayHandsStreamOptions = {
+  /** Force first hand to be blackjack (A+10) to test AI uses reference data. */
+  forcedDeal21?: boolean;
+};
+
 /**
  * Play N hands with step-by-step events (deal → reasoning → decision → cards → outcome).
  * Supports multiple hits per hand (re-ask AI until stand or bust). Emits events for live UI.
@@ -259,7 +285,8 @@ export async function playHandsStream(
   modelId: string,
   maxBetCents: number,
   hands: number,
-  onEvent: (ev: StreamEvent) => void
+  onEvent: (ev: StreamEvent) => void,
+  options?: PlayHandsStreamOptions
 ): Promise<void> {
   const date = today();
   const provider = getAIProvider(modelId);
@@ -285,10 +312,22 @@ export async function playHandsStream(
     const handId = randomUUID();
 
     // Deal first so the AI can see their cards before betting
-    const deck = createDeck();
-    const playerCards: Card[] = [deck.pop()!, deck.pop()!];
-    const dealerUpcard = deck.pop()!;
-    const dealerDown = deck.pop()!;
+    let deck: Card[];
+    let playerCards: Card[];
+    let dealerUpcard: Card;
+    let dealerDown: Card;
+    if (options?.forcedDeal21 && handIndex === 0) {
+      const forced = createForced21Deal();
+      deck = forced.deck;
+      playerCards = [...forced.playerCards];
+      dealerUpcard = forced.dealerUpcard;
+      dealerDown = forced.dealerDown;
+    } else {
+      deck = createDeck();
+      playerCards = [deck.pop()!, deck.pop()!];
+      dealerUpcard = deck.pop()!;
+      dealerDown = deck.pop()!;
+    }
     onEvent({ type: "deal", playerCards: [...playerCards], playerTotal: handValue(playerCards), dealerUpcard });
 
     // AI decides how much to bet after seeing the initial deal

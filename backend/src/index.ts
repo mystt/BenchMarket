@@ -34,11 +34,12 @@ app.get("/health", (_req, res) =>
     ok: true,
     openaiConfigured: !!(config.openaiApiKey ?? process.env.OPENAI_API_KEY),
     hederaKnowledgeConfigured: !!(config.knowledgeInboundTopicId && config.hederaInboundTopicId),
-    /** Send to topic button: only needs topic + operator creds (no HEDERA_INBOUND_TOPIC_ID) */
-    knowledgeSendConfigured: !!(config.knowledgeInboundTopicId && config.hederaOperatorId && config.hederaOperatorKey),
+    /** Send to topic: needs topic + operator creds + HEDERA_TOPIC_ID (uses same client as blackjack storage) */
+    knowledgeSendConfigured: !!(config.knowledgeInboundTopicId && config.hederaOperatorId && config.hederaOperatorKey && config.hederaTopicId),
     /** Debug: which vars the server sees (values hidden). Use to diagnose "Set KNOWLEDGE_INBOUND_TOPIC_ID" etc. */
     env: {
       KNOWLEDGE_INBOUND_TOPIC_ID: config.knowledgeInboundTopicId ? "set" : "missing",
+      HEDERA_TOPIC_ID: config.hederaTopicId ? "set" : "missing",
       HEDERA_OPERATOR_ID: config.hederaOperatorId ? "set" : "missing",
       HEDERA_OPERATOR_KEY: config.hederaOperatorKey ? "set" : "missing",
     },

@@ -4,20 +4,32 @@ import { playHand, getBlackjackDailyState, playHandsStream, playHandsStreamVs, g
 import { getAIProviders } from "../ai/index.js";
 import { getAutoPlayStatus, claimPendingHand, setAutoPlayLastHandAt } from "../jobs/autoPlayBlackjack.js";
 import { fetchBlackjackHandHistory } from "../hedera/hand-history.js";
+import { submitToKnowledgeTopic } from "../hedera/knowledge-agent.js";
 import { submitToTopic } from "../hedera/hcs.js";
 
 export const blackjackRouter = Router();
 
-/** POST /api/blackjack/send-to-knowledge — submit "hello world" to KNOWLEDGE_INBOUND_TOPIC_ID. Uses exact same HCS path as blackjack storage. */
+/** POST /api/blackjack/send-to-knowledge — submit "hello world". ?topic=storage = HEDERA_TOPIC_ID (verify); else KNOWLEDGE_INBOUND_TOPIC_ID (same path as test script). */
 blackjackRouter.post("/send-to-knowledge", async (req, res) => {
-  const topicId = config.knowledgeInboundTopicId;
+  const useStorage = (req.query as { topic?: string }).topic === "storage";
+  const topicId = useStorage ? config.hederaTopicId : config.knowledgeInboundTopicId;
   if (!topicId) {
-    return res.status(400).json({ error: "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
+    return res.status(400).json({ error: useStorage ? "Set HEDERA_TOPIC_ID" : "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
   }
   try {
-    const msg = "hello world";
-    await submitToTopic(topicId, msg);
-    res.json({ ok: true, topicId, message: "Message submitted. Check HashScan for topic " + topicId });
+    const txId = useStorage
+      ? await submitToTopic(topicId, "hello world")
+      : await submitToKnowledgeTopic("hello world");
+    const network = (config.hederaNetwork ?? "testnet") as string;
+    const hashscanBase = network === "mainnet" ? "https://hashscan.io" : "https://hashscan.io/testnet";
+    res.json({
+      ok: true,
+      topicId,
+      txId,
+      hashscanTx: `${hashscanBase}/transaction/${txId}`,
+      hashscanTopic: `${hashscanBase}/topic/${topicId}`,
+      message: `Submitted. Check ${hashscanBase}/topic/${topicId}`,
+    });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     console.error("POST /api/blackjack/send-to-knowledge:", e);

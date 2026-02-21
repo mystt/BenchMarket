@@ -82,17 +82,20 @@ function getClientForSubmit(): Client | null {
 /**
  * Submit a raw message to any Hedera topic.
  * Uses the EXACT same client as submitAiResult (blackjack storage) — requires HEDERA_TOPIC_ID.
- * Throws on error so the API can return 500.
+ * Waits for receipt to confirm consensus. Throws on error.
+ * @returns transaction ID string for HashScan verification
  */
-export async function submitToTopic(topicId: string, message: string): Promise<void> {
+export async function submitToTopic(topicId: string, message: string): Promise<string> {
   const c = getClient();
   if (!c) throw new Error("Set HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY, and HEDERA_TOPIC_ID");
   const tx = new TopicMessageSubmitTransaction()
     .setTopicId(TopicId.fromString(topicId))
     .setMessage(message);
-  const receipt = await tx.execute(c);
-  const txId = receipt.transactionId?.toString();
-  console.log("[HCS] Submitted to topic", topicId, "txId:", txId || "?", "msg:", message.slice(0, 50));
+  const response = await tx.execute(c);
+  await response.getReceipt(c); // throws if tx failed
+  const txId = response.transactionId?.toString() ?? "";
+  console.log("[HCS] Submitted to topic", topicId, "txId:", txId);
+  return txId;
 }
 
 /** Payload to submit (same as HcsPayload from schema). */

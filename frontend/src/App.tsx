@@ -961,6 +961,7 @@ export default function App() {
   const [knowledgeStreaming, setKnowledgeStreaming] = useState(false);
   const [knowledgeSendStatus, setKnowledgeSendStatus] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [knowledgeSendConfigured, setKnowledgeSendConfigured] = useState<boolean | null>(null);
+  const [knowledgeLastTx, setKnowledgeLastTx] = useState<{ hashscanTx?: string; hashscanTopic?: string; topicId?: string } | null>(null);
   const [knowledgeStreamState, setKnowledgeStreamState] = useState<{
     playerCards: string[];
     playerTotal: number | null;
@@ -1539,14 +1540,19 @@ export default function App() {
     }
   };
 
-  const sendToKnowledgeTopic = useCallback(async () => {
+  const sendToKnowledgeTopic = useCallback(async (useStorageTopic = false) => {
     setKnowledgeSendStatus("sending");
     setError("");
+    setKnowledgeLastTx(null);
     try {
-      const res = await fetch(`${API}/blackjack/send-to-knowledge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: { test: true, ts: new Date().toISOString() } }) });
+      const url = `${API}/blackjack/send-to-knowledge${useStorageTopic ? "?topic=storage" : ""}`;
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Request failed");
       setKnowledgeSendStatus("ok");
+      if (data.hashscanTx || data.hashscanTopic) {
+        setKnowledgeLastTx({ hashscanTx: data.hashscanTx, hashscanTopic: data.hashscanTopic, topicId: data.topicId });
+      }
     } catch (e) {
       setKnowledgeSendStatus("err");
       setError(e instanceof Error ? e.message : "Failed to send");
@@ -2824,12 +2830,12 @@ export default function App() {
           )}
           {!apiUnreachable && knowledgeSendConfigured === false && (
             <p style={{ padding: 12, background: "#422006", color: "#fef3c7", borderRadius: 8, marginBottom: 24, fontSize: "0.9rem" }}>
-              <strong>Send to topic</strong> requires: <code style={{ background: "#78350f", padding: "2px 6px" }}>KNOWLEDGE_INBOUND_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_ID</code>, and <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_KEY</code>. Set these in Render Environment or your backend <code style={{ background: "#78350f", padding: "2px 6px" }}>.env</code>, then redeploy.
+              <strong>Send to topic</strong> requires: <code style={{ background: "#78350f", padding: "2px 6px" }}>KNOWLEDGE_INBOUND_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_TOPIC_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_ID</code>, <code style={{ background: "#78350f", padding: "2px 6px" }}>HEDERA_OPERATOR_KEY</code>. Set in Render Environment or <code style={{ background: "#78350f", padding: "2px 6px" }}>.env</code>, then redeploy.
             </p>
           )}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 24 }}>
             <button
-              onClick={sendToKnowledgeTopic}
+              onClick={() => sendToKnowledgeTopic(false)}
               disabled={knowledgeSendStatus === "sending" || knowledgeSendConfigured === false}
               style={{
                 padding: "12px 24px",
@@ -2842,6 +2848,22 @@ export default function App() {
               }}
             >
               {knowledgeSendStatus === "sending" ? "Sending…" : knowledgeSendStatus === "ok" ? "✓ Sent" : "Send to topic"}
+            </button>
+            <button
+              onClick={() => sendToKnowledgeTopic(true)}
+              disabled={knowledgeSendStatus === "sending"}
+              title="Sends to HEDERA_TOPIC_ID (blackjack storage) to verify backend can submit"
+              style={{
+                padding: "12px 16px",
+                background: "#334155",
+                border: "1px solid #475569",
+                borderRadius: 8,
+                color: "#e2e8f0",
+                fontWeight: 500,
+                cursor: knowledgeSendStatus === "sending" ? "not-allowed" : "pointer",
+              }}
+            >
+              Test (storage topic)
             </button>
             <button
               onClick={playKnowledgeHand}
@@ -2859,6 +2881,17 @@ export default function App() {
               {knowledgeStreaming ? "Playing… (waiting for HCS)" : "Play 1 hand"}
             </button>
           </div>
+          {knowledgeLastTx && (knowledgeLastTx.hashscanTx || knowledgeLastTx.hashscanTopic) && (
+            <p style={{ marginBottom: 16, fontSize: "0.9rem", color: "#94a3b8" }}>
+              Verify on HashScan:{' '}
+              {knowledgeLastTx.hashscanTx && (
+                <a href={knowledgeLastTx.hashscanTx} target="_blank" rel="noopener noreferrer" style={{ color: "#38bdf8", marginRight: 12 }}>Transaction</a>
+              )}
+              {knowledgeLastTx.hashscanTopic && (
+                <a href={knowledgeLastTx.hashscanTopic} target="_blank" rel="noopener noreferrer" style={{ color: "#38bdf8" }}>Topic {knowledgeLastTx.topicId}</a>
+              )}
+            </p>
+          )}
           <div
             style={{
               padding: 20,

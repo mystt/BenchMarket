@@ -8,7 +8,7 @@
 import { Router } from "express";
 import { hydrateFromHedera } from "../hedera/hydrate.js";
 import { fetchTopicMessages } from "../hedera/mirror.js";
-import { submitToTopic } from "../hedera/hcs.js";
+import { submitToKnowledgeTopic } from "../hedera/knowledge-agent.js";
 import { config } from "../config.js";
 
 export const hederaRouter = Router();
@@ -20,8 +20,16 @@ hederaRouter.post("/send-to-knowledge", async (req, res) => {
     return res.status(400).json({ error: "Set KNOWLEDGE_INBOUND_TOPIC_ID" });
   }
   try {
-    await submitToTopic(topicId, "hello world");
-    res.json({ ok: true, topicId, message: "Message submitted. Check HashScan for topic " + topicId });
+    const txId = await submitToKnowledgeTopic("hello world");
+    const network = (config.hederaNetwork ?? "testnet") as string;
+    const hashscanBase = network === "mainnet" ? "https://hashscan.io" : "https://hashscan.io/testnet";
+    res.json({
+      ok: true,
+      topicId,
+      txId,
+      hashscanTx: `${hashscanBase}/transaction/${txId}`,
+      hashscanTopic: `${hashscanBase}/topic/${topicId}`,
+    });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     console.error("POST /api/hedera/send-to-knowledge:", e);

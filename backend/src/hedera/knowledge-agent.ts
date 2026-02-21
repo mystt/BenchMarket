@@ -56,6 +56,24 @@ export function resolveKnowledgeResponse(requestId: string, contents: string): v
   entry.resolve(contents);
 }
 
+/**
+ * Submit a raw message to KNOWLEDGE_INBOUND_TOPIC_ID. Uses exact same client as askKnowledge (test script path).
+ * Waits for receipt to confirm consensus. Returns transaction ID for HashScan lookup.
+ */
+export async function submitToKnowledgeTopic(message: string): Promise<string> {
+  const topicId = config.knowledgeInboundTopicId;
+  const c = getClient();
+  if (!topicId || !c) throw new Error("Set KNOWLEDGE_INBOUND_TOPIC_ID, HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY");
+  const tx = new TopicMessageSubmitTransaction()
+    .setTopicId(TopicId.fromString(topicId))
+    .setMessage(message);
+  const response = await tx.execute(c);
+  await response.getReceipt(c); // wait for consensus, throws if tx failed
+  const txId = response.transactionId?.toString() ?? "unknown";
+  console.log("[Knowledge] Submitted to topic", topicId, "txId:", txId);
+  return txId;
+}
+
 /** Parse requestId from inbound message. Returns null if not a knowledge response. */
 export function parseKnowledgeResponseRequestId(contents: string): string | null {
   try {

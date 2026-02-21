@@ -35,10 +35,15 @@ const env = z.object({
   /** HCS topic id (e.g. 0.0.5678). Required to submit AI results. */
   HEDERA_TOPIC_ID: z.string().optional(),
   /** HCS inbound topic id (e.g. 0.0.911). For user bets/profile — subscribe via mirror (HIP-991). */
-  HEDERA_INBOUND_TOPIC_ID: z.string().optional(),
+  HEDERA_INBOUND_TOPIC_ID: z.string().optional().transform((s) => (s?.trim() || undefined)),
   /** HCS topic where external knowledge agent subscribes. We send requests (e.g. blackjack) here. */
-  KNOWLEDGE_INBOUND_TOPIC_ID: z.string().optional(),
-}).parse(process.env);
+  KNOWLEDGE_INBOUND_TOPIC_ID: z.string().optional().transform((s) => (s?.trim() || undefined)),
+}).parse({
+  ...process.env,
+  // Fallback: dotenv may parse " KEY" as key when .env has leading space; support both
+  HEDERA_INBOUND_TOPIC_ID: process.env.HEDERA_INBOUND_TOPIC_ID ?? (process.env as Record<string, string>)[" HEDERA_INBOUND_TOPIC_ID"],
+  KNOWLEDGE_INBOUND_TOPIC_ID: process.env.KNOWLEDGE_INBOUND_TOPIC_ID ?? (process.env as Record<string, string>)[" KNOWLEDGE_INBOUND_TOPIC_ID"],
+});
 
 const useSqlite = !env.DATABASE_URL || env.DATABASE_URL === "sqlite" || (typeof env.DATABASE_URL === "string" && env.DATABASE_URL.startsWith("file:"));
 
